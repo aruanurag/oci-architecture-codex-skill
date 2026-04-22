@@ -1,0 +1,4 @@
+interface:
+  display_name: "OCI Architecture"
+  short_description: "Generate OCI physical draw.io architectures"
+  default_prompt: "Use $oci-architecture-generator to design an OCI physical architecture, map it to approved draw.io icons, and produce a finalized .drawio diagram only after iterative visual review has removed overlapping lines, detached-looking arrowheads, and broken or crowded traffic-flow arrows."
