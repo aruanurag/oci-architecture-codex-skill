@@ -29,6 +29,8 @@ EDGE_SEGMENT_TOLERANCE = 0.1
 EDGE_LANE_OVERLAP_TOLERANCE = 4.0
 EDGE_LANE_OVERLAP_MIN_LENGTH = 24.0
 NODE_OVERLAP_PADDING = 4.0
+PARENT_BOUNDARY_TOLERANCE = 2.0
+PARENT_CENTER_TOLERANCE = 1.0
 MAX_EDGE_BENDS = 3
 
 TEXT_STYLE = (
@@ -763,6 +765,7 @@ class DrawioRenderer:
 
         return {
             "element_id": element.get("id"),
+            "parent_element_id": element.get("parent"),
             "kind": "text",
             "role": "text",
             "resolution": "text",
@@ -830,6 +833,7 @@ class DrawioRenderer:
 
         return {
             "element_id": element.get("id"),
+            "parent_element_id": element.get("parent"),
             "kind": "shape",
             "role": "anchor" if is_anchor else "placeholder",
             "resolution": "anchor" if is_anchor else resolution,
@@ -889,7 +893,7 @@ class DrawioRenderer:
                 root,
                 {
                     "x": x,
-                    "y": y + height + float(element.get("external_label_offset", 6)),
+                    "y": y + height + float(element.get("external_label_offset", 2)),
                     "w": width,
                     "h": float(element.get("external_label_height", 20)),
                     "text": str(element["external_label"]),
@@ -908,6 +912,7 @@ class DrawioRenderer:
 
         return {
             "element_id": element.get("id"),
+            "parent_element_id": element.get("parent"),
             "kind": "library",
             "role": role,
             "resolution": resolution,
@@ -1454,6 +1459,46 @@ def rectangles_overlap(
     )
 
 
+def point_within_rect(
+    point: tuple[float, float],
+    rect: tuple[float, float, float, float] | None,
+    tolerance: float = 0.0,
+) -> bool:
+    if rect is None:
+        return False
+
+    left, top, width, height = rect
+    right = left + width
+    bottom = top + height
+    return (
+        left - tolerance <= point[0] <= right + tolerance
+        and top - tolerance <= point[1] <= bottom + tolerance
+    )
+
+
+def rect_within_rect(
+    inner: tuple[float, float, float, float] | None,
+    outer: tuple[float, float, float, float] | None,
+    tolerance: float = 0.0,
+) -> bool:
+    if inner is None or outer is None:
+        return False
+
+    inner_left, inner_top, inner_width, inner_height = inner
+    outer_left, outer_top, outer_width, outer_height = outer
+    inner_right = inner_left + inner_width
+    inner_bottom = inner_top + inner_height
+    outer_right = outer_left + outer_width
+    outer_bottom = outer_top + outer_height
+
+    return (
+        inner_left >= outer_left - tolerance
+        and inner_top >= outer_top - tolerance
+        and inner_right <= outer_right + tolerance
+        and inner_bottom <= outer_bottom + tolerance
+    )
+
+
 def segment_intersects_rect(
     start: tuple[float, float],
     end: tuple[float, float],
@@ -1589,6 +1634,48 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                     f"{element_ref} is stretched away from its native OCI icon aspect ratio.",
                     primary=element_ref,
                     element_id=row.get("element_id"),
+                )
+
+        parented_layout_nodes = [
+            row
+            for row in rows
+            if row.get("kind") in {"library", "shape"}
+            and not is_anchor_record(row)
+            and row.get("parent_element_id")
+        ]
+        for row in parented_layout_nodes:
+            parent = nodes_by_id.get(str(row.get("parent_element_id")))
+            if parent is None:
+                continue
+
+            child_bounds = record_bounds(row)
+            parent_bounds = record_bounds(parent)
+            if child_bounds is None or parent_bounds is None:
+                continue
+
+            child_x, child_y, child_width, child_height = child_bounds
+            child_center = (child_x + child_width / 2, child_y + child_height / 2)
+            child_ref = record_identifier(row)
+            parent_ref = record_identifier(parent)
+
+            if not point_within_rect(child_center, parent_bounds, tolerance=PARENT_CENTER_TOLERANCE):
+                add_issue(
+                    "child-center-outside-parent",
+                    f"{child_ref} is not centered within {parent_ref}; its center point falls outside the parent boundary.",
+                    primary=child_ref,
+                    secondary=parent_ref,
+                    element_id=row.get("element_id"),
+                    parent_element_id=row.get("parent_element_id"),
+                )
+
+            if not rect_within_rect(child_bounds, parent_bounds, tolerance=PARENT_BOUNDARY_TOLERANCE):
+                add_issue(
+                    "child-outside-parent-boundary",
+                    f"{child_ref} extends outside {parent_ref}.",
+                    primary=child_ref,
+                    secondary=parent_ref,
+                    element_id=row.get("element_id"),
+                    parent_element_id=row.get("parent_element_id"),
                 )
 
         layout_nodes = [

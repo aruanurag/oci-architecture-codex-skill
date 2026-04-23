@@ -171,6 +171,8 @@ Supported edge fields:
 
 For traffic-flow arrows on physical diagrams, use anchors and waypoints deliberately to reserve clean lanes. Do not accept a route that looks detached, overlaps another major arrow, forces the label through a boundary or icon, or relies on an uncontrolled diagonal segment.
 
+Do not accept a child container or icon whose center point falls outside its intended parent boundary, or whose rendered bounds spill outside that parent. Parent-relative placement should remain visually contained.
+
 When a physical edge crosses a container boundary:
 
 - route the connector to a hidden boundary anchor first
@@ -197,7 +199,7 @@ python3 scripts/render_oci_drawio.py \
 4. Validate with `scripts/test_render_oci_drawio.py` or `validate_drawio_file(...)`.
 5. If the quality review fails, fix the spec and rerender until it passes.
 6. After the first passing quality review, do one more rerender and require a second passing quality review before delivery.
-7. Export the physical page to PNG and do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, icon sizing, and label collisions.
+7. Export the physical page to PNG and do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, icon sizing, child containment within parent boundaries, and label collisions.
 
 ## Bundled Examples
 

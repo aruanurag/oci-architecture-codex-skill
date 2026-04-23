@@ -91,6 +91,13 @@ COMMON_ALIASES = {
     "remote peering": "Physical - Special Connectors - Remote Peering - Horizontal",
 }
 
+PHYSICAL_APPROVED_FALLBACKS = {
+    "queue": "Analytics and AI - Streaming",
+    "oci queue": "Analytics and AI - Streaming",
+    "queue service": "Analytics and AI - Streaming",
+    "message queue": "Analytics and AI - Streaming",
+}
+
 PLACEHOLDER_SHAPES = {
     "app": "rounded-rectangle",
     "data": "cylinder",
@@ -341,6 +348,24 @@ def resolve_icon(query: str, page: str = "physical", catalog_path: Path | None =
             "confidence": 1.0,
             "reason": f"Mapped the query through a trusted alias: {query_norm}.",
         }
+
+    if page == "physical":
+        fallback_target = PHYSICAL_APPROVED_FALLBACKS.get(query_norm)
+        if fallback_target and fallback_target in title_index:
+            entry = title_index[fallback_target]
+            return {
+                "query": query,
+                "page": page,
+                "resolution": "closest-official-fallback",
+                "icon_title": entry["title"],
+                "category": entry["category"],
+                "source": entry["source"],
+                "confidence": 0.82,
+                "reason": (
+                    "No direct official icon exists in the bundled physical catalog for this service. "
+                    "Used the approved closest official fallback icon and disclose it as a fallback in the mapping table."
+                ),
+            }
 
     scored = [
         (score_candidate(query_norm, query_tokens, entry, category_hint), entry)

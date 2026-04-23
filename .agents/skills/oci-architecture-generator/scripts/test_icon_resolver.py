@@ -50,6 +50,11 @@ class ResolveIconTests(unittest.TestCase):
         self.assertIn(result["resolution"], {"direct", "alias"})
         self.assertEqual(result["icon_title"], "Networking - Route Table and Security List")
 
+    def test_queue_uses_closest_official_fallback(self) -> None:
+        result = resolve_icon("Queue", page="physical")
+        self.assertEqual(result["resolution"], "closest-official-fallback")
+        self.assertEqual(result["icon_title"], "Analytics and AI - Streaming")
+
     def test_logical_generic_third_party(self) -> None:
         result = resolve_icon("External SaaS CRM", page="logical")
         self.assertEqual(result["resolution"], "generic")

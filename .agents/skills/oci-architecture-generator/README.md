@@ -27,20 +27,24 @@ If you copy this skill into the global folder, you can use it across workspaces.
 The skill helps Codex:
 
 1. interpret an OCI architecture description
-2. map requested components to approved OCI icons
-3. use the closest honest fallback when an official OCI icon is missing
-4. generate a renderable JSON spec
-5. render a finalized `.drawio` file
-6. export the physical page to PNG
-7. iterate until lines, arrows, and labels are visually clean
-8. route cross-container traffic through hidden boundary anchors so connectors visibly meet subnet and VCN walls instead of merely approaching them
+2. do a short planning and ambiguity-analysis pass before drawing
+3. ask a few targeted clarification questions when those answers would improve the topology or layout
+4. map requested components to approved OCI icons
+5. use the closest honest fallback when an official OCI icon is missing
+6. generate a renderable JSON spec
+7. render a finalized `.drawio` file
+8. export the physical page to PNG
+9. iterate until lines, arrows, and labels are visually clean
+10. route cross-container traffic through hidden boundary anchors so connectors visibly meet subnet and VCN walls instead of merely approaching them
 
 By default, the skill now produces:
 
+- a short plan and gap analysis before layout work starts
 - a physical diagram only
 - public and private subnet structure with CIDRs for networked workloads
 - iterative visual QA focused on traffic-flow arrows, overlaps, and detached-looking connectors
 - boundary-first routing for cross-container traffic, with hidden `*-anchor` shapes on container borders and arrowheads reserved for final destination segments
+- targeted clarification questions only when they materially improve topology, networking, DR posture, or icon resolution
 
 ## When To Use It
 
@@ -150,6 +154,24 @@ It must:
 5. do at least two cleanup passes plus one confirmatory pass
 
 Broken-looking traffic arrows, overlaps, detached-looking arrowheads, and labels on top of lines are treated as blockers.
+
+### Planning And Clarifications
+
+Before generating the draw.io spec, the skill should:
+
+1. summarize the inferred architecture plan
+2. identify what is still ambiguous
+3. ask only the few questions that would materially change the diagram
+
+Typical clarification topics:
+
+- single-region or multi-region deployment
+- active-active or active-standby DR posture
+- internet-facing versus private-only entry points
+- subnet segmentation and CIDR expectations
+- reference architecture or Oracle sample to follow
+
+If the request is already specific enough, the skill should skip the questions and proceed.
 
 ### Connector Routing Defaults
 

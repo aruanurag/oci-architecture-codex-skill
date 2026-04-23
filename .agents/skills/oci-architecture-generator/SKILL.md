@@ -23,19 +23,35 @@ Use this skill to keep OCI architecture work disciplined and honest:
 1. Read [references/style-guide.md](references/style-guide.md) before producing diagram guidance.
 2. Read [references/output-format.md](references/output-format.md) to shape the final package.
 3. Read [references/diagram-spec.md](references/diagram-spec.md) before authoring a renderable JSON spec.
-4. Run `python3 scripts/select_reference_architecture.py --query "user request" --bundle --top 5` and inspect the strongest bundled reference in `assets/reference-architectures/oracle/`, plus any supporting references suggested for DR, security, or workload-specific details.
-5. If a strong reference exists, preserve the primary reference's page geometry, subnet framing, icon scale, whitespace, and routing lanes as the starting baseline. Borrow only the specific DR, security, or traffic-flow ideas that the supporting references cover better.
-6. Use `python3 scripts/resolve_oci_icon.py --page physical --query "OKE"` or `--page logical` when you need explicit icon resolution, browsing, or fallback evidence.
-7. Author a physical page spec by default. Add a logical page only when the user explicitly requests it.
-8. Render with `python3 scripts/render_oci_drawio.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`.
-9. For any physical flow that crosses a VCN, subnet, tier, or other container boundary, add tiny hidden `*-anchor` shapes on the relevant border and route the line through those anchors before it enters the next container.
-10. Use `style: "endArrow=none;"` on intermediate boundary-to-boundary or icon-to-boundary segments. Keep the visible arrowhead only on the final segment that enters the destination workload or endpoint icon.
-11. If the renderer exits non-zero because the quality review found issues, update anchors, waypoints, spacing, sizes, or canvas dimensions and rerender. Do not share the output yet.
-12. Run at least three repair passes after the first render, even if the first quality review is already clean.
-13. After the first passing quality review, do one more rerender and require a second clean quality review before delivering the diagram.
-14. Export the rendered physical page to PNG and inspect it visually before considering the work done.
-15. Treat a connector that stops just outside a subnet wall, VCN wall, or workload icon as broken even if the automated quality review does not flag it yet.
-16. Use the bundled draw.io assets in `assets/drawio/` and `assets/reference-architectures/oracle/` instead of relying on external copies.
+4. Start with a short planning pass before generating the diagram. Summarize the inferred topology, network shape, DR or HA posture, likely reference baseline, and any assumptions that would materially affect layout quality.
+5. Run `python3 scripts/select_reference_architecture.py --query "user request" --bundle --top 5` and inspect the strongest bundled reference in `assets/reference-architectures/oracle/`, plus any supporting references suggested for DR, security, or workload-specific details.
+6. Compare the user request against the likely reference baseline and identify the few uncertainties that would change topology, subnet framing, region layout, service selection, or icon mapping.
+7. If the request is materially ambiguous, ask concise clarification questions before authoring the spec. Keep this to the smallest useful set, usually no more than three questions, and prioritize questions whose answers would visibly change the diagram.
+8. Treat a request that is only a short service list, such as "Functions, Queue, Object Storage, NoSQL", as materially ambiguous by default unless ingress, region posture, HA or DR expectations, and managed-service placement are already obvious from context. In that case, ask at least two targeted follow-up questions before drafting.
+9. If the user explicitly says not to ask questions, or if the remaining ambiguity is minor, proceed with reasonable assumptions and state them clearly before rendering.
+10. If a strong reference exists, preserve the primary reference's page geometry, subnet framing, icon scale, whitespace, and routing lanes as the starting baseline. Borrow only the specific DR, security, or traffic-flow ideas that the supporting references cover better.
+11. Use `python3 scripts/resolve_oci_icon.py --page physical --query "OKE"` or `--page logical` when you need explicit icon resolution, browsing, or fallback evidence.
+12. Author a physical page spec by default. Add a logical page only when the user explicitly requests it.
+13. Render with `python3 scripts/render_oci_drawio.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`.
+14. For any physical flow that crosses a VCN, subnet, tier, or other container boundary, add tiny hidden `*-anchor` shapes on the relevant border and route the line through those anchors before it enters the next container.
+15. Use `style: "endArrow=none;"` on intermediate boundary-to-boundary or icon-to-boundary segments. Keep the visible arrowhead only on the final segment that enters the destination workload or endpoint icon.
+16. If the renderer exits non-zero because the quality review found issues, update anchors, waypoints, spacing, sizes, or canvas dimensions and rerender. Do not share the output yet.
+17. Run at least three repair passes after the first render, even if the first quality review is already clean.
+18. After the first passing quality review, do one more rerender and require a second clean quality review before delivering the diagram.
+19. Export the rendered physical page to PNG and inspect it visually before considering the work done.
+20. Treat a connector that stops just outside a subnet wall, VCN wall, or workload icon as broken even if the automated quality review does not flag it yet.
+21. Use the bundled draw.io assets in `assets/drawio/` and `assets/reference-architectures/oracle/` instead of relying on external copies.
+
+## Clarification Priorities
+
+Ask only the questions that are most likely to improve the actual diagram. Prioritize:
+
+1. Topology-defining gaps, such as single-region vs multi-region, active-active vs active-standby, public vs private exposure, and hub-spoke vs flat VCN structure.
+2. Network completeness gaps, such as whether to show separate app, data, management, or observability subnets, gateway types, CIDRs, and on-premises connectivity.
+3. Service-resolution gaps, such as whether a workload should be shown with OKE, Compute, API Gateway, Functions, ADB, Exadata, or a placeholder.
+4. Visual-baseline gaps, such as whether the user wants the output to follow a specific Oracle reference or sample diagram.
+
+Do not ask questions whose answers are unlikely to change geometry, routing lanes, subnet structure, region layout, or icon choice.
 
 ## Mapping Rules
 
@@ -43,11 +59,12 @@ Apply this order strictly:
 
 1. Use a direct official OCI icon when the service is present in the bundled catalog.
 2. Use a common OCI alias that resolves to an official icon, such as `OKE`, `ADW`, `ATP`, `DRG`, or `WAF`.
-3. Use an official generic logical component on logical diagrams when the workload element is clearly OCI, Oracle on-premises, or third-party but not directly represented.
-4. On physical diagrams, when no official OCI icon exists, use the closest similar placeholder shape for the workload type instead of pretending an OCI icon exists.
-5. Mention the closest official OCI icon considered only in notes when it helps explain the fallback. Do not silently substitute it as the rendered icon.
+3. Use an approved closest official fallback icon on physical diagrams when the local skill explicitly documents that fallback for a known catalog gap, and disclose it as a fallback in the mapping table.
+4. Use an official generic logical component on logical diagrams when the workload element is clearly OCI, Oracle on-premises, or third-party but not directly represented.
+5. On physical diagrams, when no official OCI icon exists and there is no approved closest official fallback, use the closest similar placeholder shape for the workload type instead of pretending an OCI icon exists.
+6. Mention the closest official OCI icon considered only in notes when it helps explain the fallback. Do not silently substitute it as the rendered icon unless step 3 explicitly allows it.
 
-When you use step 3, 4, or 5, say so explicitly in the icon mapping table.
+When you use step 3, 4, 5, or 6, say so explicitly in the icon mapping table.
 
 ## Diagram Rules
 
@@ -62,8 +79,8 @@ When you use step 3, 4, or 5, say so explicitly in the icon mapping table.
 - Reserve separate routing lanes for major north-south and east-west traffic flows when that reduces broken-looking or stacked arrows.
 - When adapting a bundled reference architecture, preserve its lane structure and icon scale unless the new workload forces a different layout.
 - Use explicit anchors and waypoints for physical traffic arrows instead of relying on default routing for anything more complex than a straight single-lane connection.
-- Route cross-container physical flows boundary-first: exit the source workload toward a hidden border anchor, bridge between border anchors with orthogonal segments, then enter the target workload from the destination border anchor.
-- Use tiny invisible shape elements with ids ending in `-anchor` as routing primitives on subnet, VCN, tier, or region boundaries. These are intentional routing controls, not placeholder icons.
+- Prefer a single physical connector with orthogonal waypoints when it can cross boundaries cleanly and still look attached, straight, and machine-generated.
+- Use tiny invisible shape elements with ids ending in `-anchor` as routing primitives on subnet, VCN, tier, or region boundaries only when a single connector cannot stay clean, straight, and unambiguous without them.
 - Keep arrowheads off intermediate routing segments by using `endArrow=none;` until the final segment into the destination workload.
 - Treat "almost touching" a container wall or service icon as a blocker. A connector should visibly meet the boundary or destination, not merely approach it.
 - Let the renderer normalize service icon sizes when `w` and `h` are omitted. Only override icon sizes deliberately.
@@ -86,8 +103,14 @@ Only produce a logical page when the user explicitly asks for one.
 - Use clearly labeled similar placeholder shapes when no direct OCI icon exists.
 - Default to public and private subnet structure with CIDR labels on bundled examples and final physical diagrams unless the user asks for a different level of detail.
 - Keep traffic-flow arrows simple and intentional. Prefer a clear dedicated lane and fewer bends over a compact but broken-looking route.
-- For flows that cross subnet or VCN boundaries, use hidden `*-anchor` shapes on those borders and split the route into clean orthogonal segments instead of drawing one long connector that only appears to touch the container.
-- Place boundary-attached gateways such as `Internet Gateway`, `NAT Gateway`, and `Service Gateway` directly on the relevant subnet or VCN border when that attachment is visually obvious. Do not add a short decorative connector line from the gateway into the boundary.
+- Keep service labels visually snug to their icons. Default external labels to a minimal vertical gap and only add extra spacing when a multi-line label or nearby connector would otherwise collide.
+- For flows that cross subnet or VCN boundaries, prefer one clean orthogonal connector first. Use hidden `*-anchor` shapes only when the direct connector would otherwise look broken, crowded, diagonal, or ambiguous.
+- Treat one semantic relationship as one visible connector. Do not stitch a single flow out of multiple edge objects just to cross VCN, subnet, or OSN boundaries when one waypointed connector with optional hidden endpoint anchors can stay clean.
+- When a direct connector into a service icon makes the last arrow segment look tilted, stepped, or detached, terminate the single visible connector at a tiny invisible attach anchor placed exactly on the target icon boundary instead of letting draw.io pick a broken-looking perimeter point.
+- Never route a traffic connector along the same visible lane as a VCN, subnet, or dashed workload-container border. If a connector would visually sit on top of a container edge, move it to a dedicated lane even when the automated quality check passes.
+- Place boundary-attached gateways such as `Internet Gateway`, `NAT Gateway`, and `Service Gateway` directly on the VCN border by default. Let the VCN border line pass through the gateway icon's center, and parent the gateway to the region or other enclosing canvas when needed so the icon can straddle the VCN boundary cleanly. Do not move gateways down to subnet borders unless the user explicitly asks for that style, and do not add a short decorative connector line from the gateway into the boundary.
+- Do not add standalone `Route Table` or `Security List` icons when the chosen subnet grouping already renders those controls on the subnet boundary. Treat duplicate `RT` or `SL` markers as blockers.
+- Keep child containers and icons visually contained within their intended parent boundaries. Treat any child whose center point or bounds drift outside its parent as a blocker.
 - When a dashed or grouped container represents an OKE cluster, use the official `Container Engine for Kubernetes` icon as the cluster container's emblem or header marker. Do not leave the OKE icon floating as if it were a separate workload inside the cluster.
 - When using the OKE icon as a cluster badge or header marker, set `hide_internal_label: true` unless the built-in icon text is explicitly needed.
 
@@ -95,12 +118,13 @@ Only produce a logical page when the user explicitly asks for one.
 
 Default to producing:
 
-1. A short assumption list.
-2. A brief architecture summary.
-3. A renderable JSON page spec when the user wants the intermediate source.
-4. A finalized `.drawio` file with a physical page by default. Add a logical page only when the user explicitly asks for one.
-5. An icon mapping table with `Requested Component`, `Resolved Icon`, `Resolution Type`, and `Notes`.
-6. A placeholder list when any geometry fallback is required.
+1. A short planning summary.
+2. A short assumption list.
+3. A brief architecture summary.
+4. A renderable JSON page spec when the user wants the intermediate source.
+5. A finalized `.drawio` file with a physical page by default. Add a logical page only when the user explicitly asks for one.
+6. An icon mapping table with `Requested Component`, `Resolved Icon`, `Resolution Type`, and `Notes`.
+7. A placeholder list when any geometry fallback is required.
 
 ## Resources
 

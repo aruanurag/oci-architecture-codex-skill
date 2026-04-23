@@ -43,10 +43,16 @@ Use physical pages for deployable infrastructure layout.
 - Use special connector shapes for FastConnect, Site-to-site VPN, and Remote Peering.
 - Use service icons for OCI products and managed services.
 - Use public and private subnet boundaries with CIDR labels on networked workloads.
+- Attach `Internet Gateway`, `NAT Gateway`, and `Service Gateway` to the VCN edge by default, even when subnet boundaries are also shown. Let the VCN border line pass through the gateway icon center instead of leaving the icon fully inside the VCN.
 - Keep public-facing resources inside public subnets and application or data tiers inside private subnets.
 - Add extra private subnets for data, cache, or observability tiers when that reduces crowding and makes the network clearer.
 - Increase the canvas and route connectors with waypoints before letting lines pile up on top of each other.
+- Keep icon labels close to the icon by default. Only open up extra vertical gap when a multi-line label or crossing connector needs the room.
 - Reserve dedicated traffic lanes when multiple arrows traverse the same area of the page.
+- Represent one flow as one visible connector. Use waypointed routes and tiny hidden attach anchors instead of splitting the same relationship into several stitched connector objects.
+- Do not let a connector visually sit on top of a VCN, subnet, or dashed workload-container border. Use a dedicated lane instead of sharing the boundary line.
+- Do not layer standalone `Route Table` or `Security List` icons on top of subnet groupings that already render those markers on the subnet boundary. Duplicate `RT` or `SL` visuals are blockers.
+- If a direct connector into a service icon makes the arrowhead kink, tilt, or stop awkwardly near the destination, use a tiny invisible attach anchor on the service boundary so the visible connector still reads as one clean machine-routed line.
 - Export the physical page and inspect it visually. If any route looks detached, ambiguous, broken by labels, or unnecessarily overlapped, reroute and rerender.
 - Prefer more whitespace and clearer attachment points over compactness.
 - Use geometry placeholders only when there is no direct OCI icon.
@@ -57,9 +63,10 @@ Apply this order:
 
 1. Direct official icon.
 2. Official icon reached through a trusted alias, such as `OKE`, `ADW`, or `DRG`.
-3. Official generic logical component when the page is logical and the element is clearly OCI, Oracle on-premises, or third-party.
-4. Closest similar placeholder shape with a clear label when the page is physical and no OCI icon exists.
-5. Mention the closest official OCI icon considered only in notes when it would otherwise be ambiguous.
+3. Approved closest official fallback icon when the local skill documents a known physical catalog gap and the fallback is disclosed in the mapping table.
+4. Official generic logical component when the page is logical and the element is clearly OCI, Oracle on-premises, or third-party.
+5. Closest similar placeholder shape with a clear label when the page is physical and no OCI icon or approved official fallback exists.
+6. Mention the closest official OCI icon considered only in notes when it would otherwise be ambiguous.
 
 ## Placeholder Shapes
 

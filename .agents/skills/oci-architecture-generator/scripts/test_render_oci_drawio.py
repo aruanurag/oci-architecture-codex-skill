@@ -327,6 +327,145 @@ class RenderDrawioTests(unittest.TestCase):
         quality = review_render_report(report)
         self.assertFalse(quality["issues"])
 
+    def test_quality_review_flags_child_icon_outside_parent_boundary(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "child-outside-parent-boundary",
+            {
+                "title": "Child Outside Parent Boundary",
+                "pages": [
+                    {
+                        "name": "Physical - Child Outside Parent Boundary",
+                        "page_type": "physical",
+                        "width": 520,
+                        "height": 300,
+                        "elements": [
+                            {
+                                "id": "app-subnet",
+                                "query": "subnet",
+                                "x": 40,
+                                "y": 50,
+                                "w": 300,
+                                "h": 180,
+                                "value": "<b>Private App Subnet</b><br/><font color=\"#312d2a\">10.0.1.0/24</font>",
+                            },
+                            {
+                                "id": "app-vm",
+                                "query": "virtual machine",
+                                "parent": "app-subnet",
+                                "x": 250,
+                                "y": 55,
+                                "w": 90,
+                                "h": 90,
+                                "external_label": "App VM",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        self.assertIn("child-outside-parent-boundary", {issue["code"] for issue in quality["issues"]})
+
+    def test_quality_review_flags_child_container_center_outside_parent(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "child-center-outside-parent",
+            {
+                "title": "Child Center Outside Parent",
+                "pages": [
+                    {
+                        "name": "Physical - Child Center Outside Parent",
+                        "page_type": "physical",
+                        "width": 620,
+                        "height": 320,
+                        "elements": [
+                            {
+                                "id": "app-subnet",
+                                "query": "subnet",
+                                "x": 60,
+                                "y": 60,
+                                "w": 320,
+                                "h": 190,
+                                "value": "<b>Private App Subnet</b><br/><font color=\"#312d2a\">10.0.2.0/24</font>",
+                            },
+                            {
+                                "id": "app-cluster-box",
+                                "type": "shape",
+                                "shape": "rounded-rectangle",
+                                "parent": "app-subnet",
+                                "x": 260,
+                                "y": 35,
+                                "w": 180,
+                                "h": 140,
+                                "label": "App container",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        codes = {issue["code"] for issue in quality["issues"]}
+        self.assertIn("child-center-outside-parent", codes)
+        self.assertIn("child-outside-parent-boundary", codes)
+
+    def test_quality_review_accepts_child_nodes_centered_within_parent_bounds(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "child-contained-in-parent",
+            {
+                "title": "Child Contained In Parent",
+                "pages": [
+                    {
+                        "name": "Physical - Child Contained In Parent",
+                        "page_type": "physical",
+                        "width": 620,
+                        "height": 320,
+                        "elements": [
+                            {
+                                "id": "app-subnet",
+                                "query": "subnet",
+                                "x": 60,
+                                "y": 60,
+                                "w": 320,
+                                "h": 190,
+                                "value": "<b>Private App Subnet</b><br/><font color=\"#312d2a\">10.0.3.0/24</font>",
+                            },
+                            {
+                                "id": "app-vm",
+                                "query": "virtual machine",
+                                "parent": "app-subnet",
+                                "x": 115,
+                                "y": 50,
+                                "w": 90,
+                                "h": 90,
+                                "external_label": "App VM",
+                            },
+                            {
+                                "id": "app-cluster-box",
+                                "type": "shape",
+                                "shape": "rounded-rectangle",
+                                "parent": "app-subnet",
+                                "x": 70,
+                                "y": 30,
+                                "w": 180,
+                                "h": 140,
+                                "label": "App container",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        codes = {issue["code"] for issue in quality["issues"]}
+        self.assertNotIn("child-center-outside-parent", codes)
+        self.assertNotIn("child-outside-parent-boundary", codes)
+
     def test_hidden_boundary_anchors_are_reported_as_routing_primitives(self) -> None:
         _, report, validation = self.render_temp_spec(
             "boundary-anchor-routing",

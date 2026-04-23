@@ -8,16 +8,31 @@ If the selector recommends supporting references, use them only to borrow specif
 
 ## Default Package
 
-1. Assumptions
-2. Architecture Summary
-3. Final `.drawio` Diagram
-4. JSON Diagram Spec
-5. Icon Mapping Table
-6. Placeholder and Gap Notes
+1. Planning Summary
+2. Assumptions
+3. Architecture Summary
+4. Final `.drawio` Diagram
+5. JSON Diagram Spec
+6. Icon Mapping Table
+7. Placeholder and Gap Notes
+
+## Planning Summary
+
+Before generating the diagram, briefly summarize:
+
+- inferred topology and deployment style
+- expected network boundaries
+- probable HA or DR model
+- closest bundled reference architecture to use as the baseline
+- the key gaps or ambiguities that might reduce diagram quality
+
+If important gaps remain, ask the user the smallest useful set of clarification questions before generating the diagram. Favor questions whose answers change layout, topology, subnet structure, region usage, gateway placement, or service/icon selection.
+
+When the request is primarily a list of OCI services rather than a full architecture description, ask follow-up questions by default before generating. At minimum, clarify ingress or exposure, single-region vs multi-region or HA posture, and any service-placement or icon-resolution choice that would visibly change the diagram.
 
 ## Assumptions
 
-Keep this short. Include only items that materially affect the design, such as:
+Keep this short. Include only items that materially affect the design, such as but not limited to:
 
 - regions or multi-region posture
 - HA or DR targets
@@ -43,6 +58,7 @@ Unless the user says otherwise:
 - include a logical page only when the user explicitly requests one
 - include VCN and public/private subnet structure with CIDR labels on physical pages for networked workloads
 - keep public resources visually inside public subnets and private resources inside private subnets
+- when gateways such as `IGW`, `NAT`, or `SGW` are shown, attach them to the VCN edge by default unless the user explicitly requests a subnet-edge style
 - enlarge the page or reroute edges before accepting overlapping or crowded connector paths
 - render with the renderer's quality gate enabled and do not accept output while it reports issues
 - pick the closest bundled reference architecture first and preserve its spacing, icon scale, and routing lanes when it is a good fit
@@ -51,6 +67,7 @@ Unless the user says otherwise:
 - export the physical page to PNG and perform one final visual QA pass before finalizing
 - treat overlapping lines, broken-looking traffic arrows, disconnected-looking attachments, stretched icons, and crowded labels as blockers, not polish items
 - note the output path clearly
+- ask targeted clarification questions first when unresolved ambiguity would materially change the resulting diagram
 
 ## JSON Diagram Spec
 
@@ -79,6 +96,7 @@ Use these resolution types:
 
 - `direct`
 - `alias`
+- `closest-official-fallback`
 - `closest`
 - `generic`
 - `placeholder`
@@ -103,7 +121,7 @@ Include:
 - Keep physical examples network-complete with VCNs and labeled subnets when the workload is deployed in a VCN.
 - Let the renderer normalize icon sizes when the spec omits `w` and `h`. Override icon sizes only deliberately.
 - Use more whitespace, extra tiers, explicit anchors, and waypointed connectors instead of allowing overlapping lines or crowded clusters.
-- For physical diagrams, route cross-container traffic boundary-first: use hidden `*-anchor` shapes on subnet or VCN borders, keep intermediate segments arrowless with `endArrow=none;`, and reserve the visible arrowhead for the final segment into the destination workload.
+- For physical diagrams, prefer one clean orthogonal connector for cross-container traffic when it can stay visually attached and readable. Use hidden `*-anchor` shapes on subnet or VCN borders only when the direct connector would otherwise create broken-looking, crowded, or diagonal routing.
 - Export the rendered page and visually inspect it. If a connector appears detached, partially attached, stacked on another route, broken by labels, forced through labels or boundaries, or shaped by a diagonal segment, reroute and rerender.
 - Treat connectors that only almost reach a subnet wall, VCN wall, or workload icon as defects. The line should visibly terminate on the intended boundary or target.
 - Prioritize traffic-flow arrows during visual QA and assign dedicated routing lanes when they would otherwise overlap.
