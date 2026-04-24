@@ -12,12 +12,72 @@ from render_oci_powerpoint import render_presentation
 from build_powerpoint_catalog import default_paths
 
 
+def build_clarification_gate(
+    *,
+    availability: str = "Single-region deployment decisions are either not in scope for this test or intentionally simplified.",
+    database: str = "No database choice is required for this guardrail test.",
+    subnet_scope: str = "Regional subnet scope is assumed unless a test explicitly says otherwise.",
+    icon_resolution: str = "Use a direct OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+) -> dict[str, object]:
+    return {
+        "status": "satisfied",
+        "notes": "Renderer test fixture clarification gate.",
+        "decisions": [
+            {
+                "topic": "availability",
+                "question": "Should this test represent HA, DR, or neither?",
+                "recommended_option": "Keep the topology as simple as possible unless the specific test requires HA or DR semantics.",
+                "selected_option": availability,
+                "resolution_source": "not_applicable",
+                "rationale": "This fixture exists to exercise renderer behavior, not workload architecture discovery.",
+            },
+            {
+                "topic": "database",
+                "question": "Which database type should appear in this test?",
+                "recommended_option": "If no database behavior is under test, record that no database choice is in scope.",
+                "selected_option": database,
+                "resolution_source": "not_applicable",
+                "rationale": "The database decision is documented explicitly so the clarification gate stays complete.",
+            },
+            {
+                "topic": "subnet_scope",
+                "question": "Should subnet framing be regional or AD-specific?",
+                "recommended_option": "Use regional subnet scope unless the test explicitly requires AD-specific subnet framing.",
+                "selected_option": subnet_scope,
+                "resolution_source": "recommendation_accepted",
+                "rationale": "Regional subnets are the default OCI assumption for these renderer fixtures.",
+            },
+            {
+                "topic": "icon_resolution",
+                "question": "If a direct icon is missing, what should this test use?",
+                "recommended_option": "Use a direct OCI icon first, then the closest honest fallback, then a clearly labeled placeholder.",
+                "selected_option": icon_resolution,
+                "resolution_source": "recommendation_accepted",
+                "rationale": "The renderer should always have an explicit icon-resolution rule recorded before rendering.",
+            },
+        ],
+    }
+
+
 def main() -> None:
     skill_dir = Path(__file__).resolve().parents[1]
     spec_path = skill_dir / "assets" / "examples" / "specs" / "simple-three-tier-oci-adb.json"
     spec = json.loads(spec_path.read_text())
+    missing_gate_spec = {
+        "title": "Missing Clarification Gate",
+        "pages": [
+            {
+                "name": "Physical - Missing Clarification Gate",
+                "page_type": "physical",
+                "width": 800,
+                "height": 450,
+                "elements": [],
+            }
+        ],
+    }
     placeholder_spec = {
         "title": "Placeholder Shape Transparency",
+        "clarification_gate": build_clarification_gate(),
         "pages": [
             {
                 "name": "Physical - Placeholder Shape Transparency",
@@ -42,6 +102,7 @@ def main() -> None:
     }
     guardrail_spec = {
         "title": "Layout Guardrails",
+        "clarification_gate": build_clarification_gate(),
         "pages": [
             {
                 "name": "Physical - Layout Guardrails",
@@ -108,6 +169,7 @@ def main() -> None:
     }
     unrelated_overlap_spec = {
         "title": "Unrelated Overlap Guardrail",
+        "clarification_gate": build_clarification_gate(),
         "pages": [
             {
                 "name": "Physical - Unrelated Overlap Guardrail",
@@ -143,6 +205,9 @@ def main() -> None:
     }
     icon_guardrail_spec = {
         "title": "Icon Resolution Guardrail",
+        "clarification_gate": build_clarification_gate(
+            icon_resolution="This test intentionally requests a missing direct icon so the renderer can flag the issue."
+        ),
         "pages": [
             {
                 "name": "Physical - Icon Resolution Guardrail",
@@ -164,6 +229,7 @@ def main() -> None:
     }
     semantic_spec = {
         "title": "Semantic Connectors and Text Autofit",
+        "clarification_gate": build_clarification_gate(),
         "pages": [
             {
                 "name": "Physical - Semantic Connectors",
@@ -243,6 +309,20 @@ def main() -> None:
         semantic_output_path = tmp / "semantic.pptx"
         semantic_report_path = tmp / "semantic.report.json"
         semantic_quality_path = tmp / "semantic.quality.json"
+
+        try:
+            render_presentation(
+                missing_gate_spec,
+                template_pptx=template_pptx,
+                output_path=tmp / "missing-gate.pptx",
+                report_out=tmp / "missing-gate.report.json",
+                quality_out=tmp / "missing-gate.quality.json",
+                fail_on_quality=False,
+            )
+        except ValueError as exc:
+            assert "clarification_gate" in str(exc), exc
+        else:
+            raise AssertionError("Expected render_presentation to reject specs without a clarification_gate.")
 
         render_presentation(
             spec,

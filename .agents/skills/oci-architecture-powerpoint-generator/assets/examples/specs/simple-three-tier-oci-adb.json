@@ -1,5 +1,43 @@
 {
   "title": "Simple Three-Tier OCI App",
+  "clarification_gate": {
+    "status": "satisfied",
+    "notes": "Example spec decisions were recorded before rendering.",
+    "decisions": [
+      {
+        "topic": "availability",
+        "question": "Should this example show HA, DR, or neither?",
+        "recommended_option": "Use a single-region HA pattern unless cross-region recovery is explicitly requested.",
+        "selected_option": "Single-region HA within one OCI region for the web and app tiers.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "The example stays within one region and does not introduce standby-region DR constructs."
+      },
+      {
+        "topic": "database",
+        "question": "Which database type should the data tier use?",
+        "recommended_option": "Use Autonomous Database when a managed OCI database is requested or when ADB is named directly.",
+        "selected_option": "Oracle Autonomous Database in the private DB subnet.",
+        "resolution_source": "user_answer",
+        "rationale": "The example is specifically modeled as a three-tier app backed by Autonomous Database."
+      },
+      {
+        "topic": "subnet_scope",
+        "question": "Should the subnets be regional or AD-specific?",
+        "recommended_option": "Use regional subnets unless AD-specific subnet framing is explicitly requested.",
+        "selected_option": "Regional public and private subnets.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "Regional subnets are the standard OCI default for this example and avoid implying AD-scoped subnet boundaries."
+      },
+      {
+        "topic": "icon_resolution",
+        "question": "If a direct icon is missing, what should be used?",
+        "recommended_option": "Use a direct official OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+        "selected_option": "All requested services resolve directly in the Oracle PowerPoint catalog, so no fallback is needed for this example.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "WAF, Load Balancer, Instance Pools, and Autonomous Database all have direct or trusted alias mappings."
+      }
+    ]
+  },
   "pages": [
     {
       "name": "Physical - Simple Three-Tier OCI App",
