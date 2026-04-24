@@ -88,6 +88,7 @@ Allowed `resolution_source` values:
 - `not_applicable`
 
 The intent is to make HA or DR posture, database choice, subnet framing, and missing-icon behavior explicit before rendering instead of burying those decisions in later notes.
+These required topics are schema recording buckets, not a fixed user-facing question list. Start with a planning pass, ask only the unresolved clarification questions that still materially affect the diagram, and record already-settled topics with `thread_context`, `recommendation_accepted`, `assumed`, or `not_applicable` when that is the honest source of the decision.
 
 ## Page Fields
 
@@ -241,7 +242,8 @@ Supported edge fields:
 - `target_anchor`: `left`, `right`, `top`, or `bottom`.
 - `waypoints`: optional list of `[x, y]` pairs or `{"x": ..., "y": ...}` objects.
 
-For traffic-flow arrows on physical diagrams, use anchors and waypoints deliberately to reserve clean lanes. Do not accept a route that looks detached, overlaps another major arrow, forces the label through a boundary or icon, or relies on an uncontrolled diagonal segment.
+For traffic-flow arrows on physical diagrams, use anchors and waypoints deliberately to reserve clean lanes. Do not accept a route that looks detached, overlaps another major arrow, forces the label through a boundary or icon, relies on an uncontrolled diagonal segment, or uses an avoidable elbow when a straight connector is available.
+Prefer straight connectors first. If a relationship can be drawn straight, do not accept an elbowed alternative. If elbows are genuinely required, keep them orthogonal, aligned, and easy to justify in review.
 When a physical topology repeats paired stages such as queues and consumers, align those rows or columns symmetrically before fine-tuning connectors.
 
 Do not accept a child container or icon whose center point falls outside its intended parent boundary, or whose rendered bounds spill outside that parent. Parent-relative placement should remain visually contained.
@@ -257,8 +259,10 @@ When a physical edge crosses a container boundary:
 ## Recommended Workflow
 
 1. Resolve icon uncertainty with `scripts/resolve_oci_icon.py`.
-2. Author the JSON spec only after the clarification gate is complete, and record the follow-up questions, recommended options, and selected answers in `clarification_gate`.
-3. Render the final diagram and quality-check it:
+2. Do a short planning and ambiguity pass first.
+3. Ask only the unresolved clarification questions that still materially affect layout, routing, subnet truth, or icon honesty.
+4. Author the JSON spec only after the clarification gate is complete, and record the follow-up questions, recommended options, and selected answers in `clarification_gate`.
+5. Render the final diagram and quality-check it:
 
 ```bash
 python3 scripts/render_oci_drawio.py \
@@ -269,12 +273,12 @@ python3 scripts/render_oci_drawio.py \
   --fail-on-quality
 ```
 
-4. Validate with `scripts/test_render_oci_drawio.py` or `validate_drawio_file(...)`.
-5. If the quality review fails, fix the spec and rerender until it passes.
-6. Export the physical page to PNG and run a dedicated spacing and overlap review focused on ingress spacing, labels, AD background lanes, cluster containers, and unrelated overlaps.
-7. Run an architectural review focused on public versus private placement, regional versus AD-specific subnet truth, HA or DR honesty, and any material ingress or security omissions.
-8. After the first passing quality review, do one more rerender and require a second passing quality review before delivery.
-9. Do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, icon sizing, child containment within parent boundaries, and label collisions.
+6. Validate with `scripts/test_render_oci_drawio.py` or `validate_drawio_file(...)`.
+7. If the quality review fails, fix the spec and rerender until it passes.
+8. Export the physical page to PNG and run a dedicated spacing and overlap review focused on ingress spacing, labels, AD background lanes, cluster containers, unrelated overlaps, and avoidable elbows.
+9. Run an architectural review focused on public versus private placement, regional versus AD-specific subnet truth, HA or DR honesty, and any material ingress or security omissions.
+10. After the first passing quality review, do one more rerender and require a second passing quality review before delivery.
+11. Do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, avoidable elbows, icon sizing, child containment within parent boundaries, and label collisions.
 
 ## Bundled Examples
 

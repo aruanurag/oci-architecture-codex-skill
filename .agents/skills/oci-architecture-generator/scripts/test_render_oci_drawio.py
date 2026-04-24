@@ -361,6 +361,44 @@ class RenderDrawioTests(unittest.TestCase):
         codes = {issue["code"] for issue in quality["issues"]}
         self.assertIn("edge-diagonal-segment", codes)
 
+    def test_quality_review_flags_avoidable_elbow_when_straight_route_exists(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "avoidable-elbow",
+            {
+                "title": "Avoidable Elbow",
+                "pages": [
+                    {
+                        "name": "Physical - Avoidable Elbow",
+                        "page_type": "physical",
+                        "width": 360,
+                        "height": 420,
+                        "elements": [
+                            {"id": "waf", "query": "WAF", "x": 40, "y": 40, "w": 90, "h": 90},
+                            {"id": "lb", "query": "load balancer", "x": 40, "y": 240, "w": 90, "h": 90},
+                            {
+                                "type": "edge",
+                                "id": "avoidable-elbow-route",
+                                "source": "waf",
+                                "target": "lb",
+                                "source_anchor": "bottom",
+                                "target_anchor": "top",
+                                "waypoints": [
+                                    {"x": 85, "y": 180},
+                                    {"x": 150, "y": 180},
+                                    {"x": 150, "y": 240},
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        codes = {issue["code"] for issue in quality["issues"]}
+        self.assertIn("edge-avoidable-elbow", codes)
+
     def test_quality_review_accepts_clean_orthogonal_edge(self) -> None:
         _, report, validation = self.render_temp_spec(
             "clean-edge",

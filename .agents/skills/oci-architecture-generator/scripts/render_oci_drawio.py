@@ -1801,7 +1801,11 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                         element_id=edge.get("element_id"),
                     )
 
-            bend_count = max(len(segments) - 1, 0)
+            bend_count = sum(
+                1
+                for first, second in zip(segments, segments[1:])
+                if first[2] != second[2]
+            )
             if bend_count > MAX_EDGE_BENDS:
                 add_issue(
                     "edge-too-many-bends",
@@ -1809,6 +1813,46 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                     primary=edge_ref,
                     element_id=edge.get("element_id"),
                 )
+
+            if bend_count > 0:
+                source_anchor = str(edge.get("source_anchor") or "").lower()
+                target_anchor = str(edge.get("target_anchor") or "").lower()
+                source_point = anchor_point(source, edge.get("source_anchor"))
+                target_point = anchor_point(target, edge.get("target_anchor"))
+                direct_orientation = None
+                if (
+                    abs(source_point[0] - target_point[0]) <= EDGE_SEGMENT_TOLERANCE
+                    and (source_anchor, target_anchor) in {("bottom", "top"), ("top", "bottom")}
+                ):
+                    direct_orientation = "vertical"
+                elif (
+                    abs(source_point[1] - target_point[1]) <= EDGE_SEGMENT_TOLERANCE
+                    and (source_anchor, target_anchor) in {("right", "left"), ("left", "right")}
+                ):
+                    direct_orientation = "horizontal"
+
+                if direct_orientation is not None:
+                    direct_route_blocked = False
+                    for obstacle in edge_obstacles:
+                        obstacle_ref = record_identifier(obstacle)
+                        if obstacle_ref in {record_identifier(source), record_identifier(target)}:
+                            continue
+                        if segment_intersects_rect(
+                            source_point,
+                            target_point,
+                            record_bounds(obstacle),
+                            padding=NODE_OVERLAP_PADDING,
+                        ):
+                            direct_route_blocked = True
+                            break
+
+                    if not direct_route_blocked:
+                        add_issue(
+                            "edge-avoidable-elbow",
+                            f"{edge_ref} uses a bent route even though a straight {direct_orientation} connector is available.",
+                            primary=edge_ref,
+                            element_id=edge.get("element_id"),
+                        )
 
             for obstacle in edge_obstacles:
                 obstacle_ref = record_identifier(obstacle)

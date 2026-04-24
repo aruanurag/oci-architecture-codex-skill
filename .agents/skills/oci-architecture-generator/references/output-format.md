@@ -29,23 +29,24 @@ Before generating the diagram, briefly summarize:
 - closest bundled reference architecture to use as the baseline
 - the key gaps or ambiguities that might reduce diagram quality
 
-If important gaps remain, ask the user the smallest useful set of clarification questions before generating the diagram. Favor questions whose answers change layout, topology, HA or DR posture, database choice, subnet structure, region usage, gateway placement, or service/icon selection.
+If important gaps remain, ask the user the smallest useful set of clarification questions before generating the diagram. Build that question set from the planning pass instead of asking a fixed schema-driven script. Favor questions whose answers change layout, topology, HA or DR posture, database choice, subnet structure, region usage, gateway placement, or service/icon selection.
 
 When the request is primarily a list of OCI services rather than a full architecture description, ask follow-up questions by default before generating. At minimum, clarify ingress or exposure, single-region vs multi-region or HA posture, database meaning, and any service-placement or icon-resolution choice that would visibly change the diagram.
 
-Even when the request seems mostly clear, still ask 2 to 4 targeted clarification questions that lock in the intended visual pattern unless the user explicitly waives questions or the current thread already answered them.
+Even when the request seems mostly clear, still ask a few targeted clarification questions when they lock in the intended visual pattern unless the user explicitly waives questions or the current thread already answered them. One good unresolved question is better than four redundant ones.
 
 ## Clarifying Questions and Answers
 
 Before authoring the diagram:
 
-- always ask 2 to 4 targeted questions that lock in topology, ingress, HA or DR posture, subnet framing, service meaning, icon choice, or symmetry and stage-alignment intent
+- ask the smallest useful set of targeted questions, usually 1 to 4, based on the planning gaps that remain around topology, ingress, HA or DR posture, subnet framing, service meaning, icon choice, or symmetry and stage-alignment intent
 - clarify whether OCI subnets should be treated as regional or AD-specific when that choice would change the diagram
 - keep questions focused on what would materially change the diagram
 - if icon meaning is uncertain or a requested component maps only weakly to the catalog, ask for confirmation, provide recommended options, and present the most honest recommendation first
 
 If the current thread already answered those questions, say that the clarification gate is satisfied and summarize the answers you are using.
 When a renderable JSON spec is part of the package, preserve the same questions, recommended options, and selected answers in the top-level `clarification_gate`. The renderer now refuses to render when that object is missing or incomplete.
+Treat the required `clarification_gate` topics as decision-recording buckets, not as a mandatory verbatim question list. If the planning pass already resolves a topic, record it from `thread_context`, `recommendation_accepted`, `assumed`, or `not_applicable` instead of asking a redundant question.
 
 ## Assumptions
 
@@ -117,7 +118,7 @@ Unless the user says otherwise:
 - run an architectural review before sign-off
 - perform at least three cleanup passes plus one confirmatory pass after the first clean review
 - export the physical page to PNG and perform one final visual QA pass before finalizing
-- treat overlapping lines, broken-looking traffic arrows, disconnected-looking attachments, stretched icons, and crowded labels as blockers, not polish items
+- treat overlapping lines, broken-looking traffic arrows, disconnected-looking attachments, avoidable elbows, stretched icons, and crowded labels as blockers, not polish items
 - note the output path clearly
 - ask targeted clarification questions first when unresolved ambiguity would materially change the resulting diagram
 
@@ -179,6 +180,8 @@ Include:
 - Keep repeated queues, consumers, or mirrored stages symmetrically aligned when that improves scanability without misleading the architecture.
 - When OKE spans multiple ADs, represent it as one cluster container inside the application subnet and use one worker grouping per AD rather than stretching one worker icon across the whole cluster.
 - For physical diagrams, prefer one clean orthogonal connector for cross-container traffic when it can stay visually attached and readable. Use hidden `*-anchor` shapes on subnet or VCN borders only when the direct connector would otherwise create broken-looking, crowded, or diagonal routing.
+- Prefer straight connectors first. If a route can be drawn straight, do not accept an elbowed alternative.
+- If a connector truly must bend, keep the elbows orthogonal, aligned, and easy to justify.
 - Export the rendered page and visually inspect it. If a connector appears detached, partially attached, stacked on another route, broken by labels, forced through labels or boundaries, or shaped by a diagonal segment, reroute and rerender.
 - Treat connectors that only almost reach a subnet wall, VCN wall, or workload icon as defects. The line should visibly terminate on the intended boundary or target.
 - Prioritize traffic-flow arrows during visual QA and assign dedicated routing lanes when they would otherwise overlap.

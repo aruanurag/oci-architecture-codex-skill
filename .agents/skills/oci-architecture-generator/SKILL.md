@@ -12,7 +12,7 @@ Use this skill to keep OCI architecture work disciplined and honest:
 - Use Oracle-provided draw.io assets first.
 - Prefer the closest bundled Oracle reference architecture before inventing a layout from scratch.
 - Default to physical diagrams only. Add a logical view only when the user explicitly asks for one.
-- Run a mandatory clarification gate before authoring any new diagram: ask a short set of targeted questions unless the user explicitly says not to ask questions or the current thread already answered them, and record the questions, recommendations, and selected answers in the top-level `clarification_gate`.
+- Run a mandatory clarification gate before authoring any new diagram: do a short planning pass first, then ask only the unresolved targeted questions unless the user explicitly says not to ask questions or the current thread already answered them, and record the questions, recommendations, and selected answers in the top-level `clarification_gate`.
 - Resolve every component to an official icon, an official logical generic, or a clearly labeled similar placeholder shape.
 - Never claim a direct official mapping when the result is really a placeholder or a non-direct fallback.
 - Run an explicit architectural review before final delivery so public or private placement, HA or DR posture, ingress security, and tier isolation are correct instead of only visually tidy.
@@ -20,6 +20,7 @@ Use this skill to keep OCI architecture work disciplined and honest:
 - Do not stop after the first render. Render, review, reroute, and rerender until the geometry review passes cleanly twice in a row.
 - Treat broken-looking traffic-flow arrows, overlapping line segments, and labels sitting on top of arrows as blockers, not polish items.
 - Treat stretched icons, inconsistent default icon sizing, diagonal edge segments, and shared connector lanes as blockers too.
+- Treat avoidable connector elbows as blockers too. If a connector truly must bend, keep the bends orthogonal, intentional, and aligned.
 - Treat shared or nearly collinear lanes between different semantic flows, such as publish, consume, and database-write paths, as overlap even when the automated checker passes.
 - Treat missing direct icons, unofficial fallbacks, and placeholders as review findings that must be surfaced explicitly before sign-off.
 - Preserve symmetry when the topology is staged, mirrored, or fanout-based by aligning repeated blocks and balancing whitespace before optimizing for the shortest route.
@@ -32,13 +33,13 @@ Use this skill to keep OCI architecture work disciplined and honest:
 4. Start with a short planning pass and share it before generating the diagram. Summarize the inferred topology, network shape, DR or HA posture, likely reference baseline, and any assumptions that would materially affect layout quality.
 5. Run `python3 scripts/select_reference_architecture.py --query "user request" --bundle --top 5` and inspect the strongest bundled reference in `assets/reference-architectures/oracle/`, plus any supporting references suggested for DR, security, or workload-specific details.
 6. Compare the user request against the likely reference baseline and identify the few uncertainties that would change topology, HA or DR posture, database choice, subnet framing, region layout, service selection, or icon mapping.
-7. After the planning pass, always ask 2 to 4 concise clarification questions before authoring the spec unless the user explicitly says not to ask questions or the current thread already answered them. Prioritize questions whose answers would visibly change topology, HA or DR posture, database choice, subnet framing including regional vs AD-specific scope, region layout, service selection, icon mapping, or symmetry and stage alignment.
+7. After the planning pass, derive the clarification questions from the unresolved gaps you just identified. Ask the smallest useful set, usually 1 to 4 questions, before authoring the spec unless the user explicitly says not to ask questions or the current thread already answered them. Do not ask the `clarification_gate` schema topics verbatim just to fill the contract. Prioritize questions whose answers would visibly change topology, HA or DR posture, database choice, subnet framing including regional vs AD-specific scope, region layout, service selection, icon mapping, or symmetry and stage alignment.
 8. Treat a request that is only a short service list, such as "Functions, Queue, Object Storage, NoSQL", as materially ambiguous by default unless ingress, region posture, HA or DR expectations, database meaning, and managed-service placement are already obvious from context. In that case, ask at least two targeted follow-up questions before drafting.
 9. If icon resolution returns `closest` or `placeholder`, or if you do not fully understand the requested component, pause before drafting when possible. Present one to three recommended icon choices or placeholder shapes, explain the tradeoff briefly, and identify the most honest recommendation first.
 10. If answers are already present in the current thread, or if the user explicitly says not to ask questions, say that the clarification gate is satisfied and name the layout-affecting choices you are carrying forward before rendering.
 11. If a strong reference exists, preserve the primary reference's page geometry, subnet framing, icon scale, whitespace, and routing lanes as the starting baseline. Borrow only the specific DR, security, or traffic-flow ideas that the supporting references cover better.
 12. Use `python3 scripts/resolve_oci_icon.py --page physical --query "OKE"` or `--page logical` when you need explicit icon resolution, browsing, or fallback evidence.
-13. Author a physical page spec by default. Add a logical page only when the user explicitly requests it, and record the final questions, recommended options, and selected answers in the top-level `clarification_gate`.
+13. Author a physical page spec by default. Add a logical page only when the user explicitly requests it, and record the final questions, recommended options, and selected answers in the top-level `clarification_gate`. Required `clarification_gate` topics are recording buckets, not a mandatory user-facing question script. Use `thread_context`, `recommendation_accepted`, `assumed`, or `not_applicable` when the planning pass already resolved a topic honestly.
 14. Render with `python3 scripts/render_oci_drawio.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`. The renderer now refuses to render when the required `clarification_gate` is missing or incomplete.
 15. For any physical flow that crosses a VCN, subnet, tier, or other container boundary, add tiny hidden `*-anchor` shapes on the relevant border and route the line through those anchors before it enters the next container.
 16. Use `style: "endArrow=none;"` on intermediate boundary-to-boundary or icon-to-boundary segments. Keep the visible arrowhead only on the final segment that enters the destination workload or endpoint icon.
@@ -74,6 +75,7 @@ Ask only the questions that are most likely to improve the actual diagram. Prior
 5. Layout-discipline gaps, such as whether repeated stages should align symmetrically, whether fanout branches should use one block or many, and whether paired tiers should read as rows or columns.
 
 Do not ask questions whose answers are unlikely to change geometry, routing lanes, subnet structure, region layout, or icon choice.
+The required `clarification_gate` topics are there to record decisions, not to force a fixed list of user-facing questions every time.
 
 ## Mapping Rules
 
@@ -107,6 +109,8 @@ If you are not confident that the requested component and the resolved icon mean
 - When the topology repeats paired stages such as queues and consumers, preserve symmetry by aligning the repeated rows or columns when that keeps the diagram honest and easier to scan.
 - Use explicit anchors and waypoints for physical traffic arrows instead of relying on default routing for anything more complex than a straight single-lane connection.
 - Prefer a single physical connector with orthogonal waypoints when it can cross boundaries cleanly and still look attached, straight, and machine-generated.
+- Prefer straight connectors first. If a route can be drawn straight, do not accept an elbowed alternative.
+- If a connector truly must use elbows, keep them orthogonal, intentional, aligned, and easy to justify in review.
 - Use tiny invisible shape elements with ids ending in `-anchor` as routing primitives on subnet, VCN, tier, or region boundaries only when a single connector cannot stay clean, straight, and unambiguous without them.
 - Keep arrowheads off intermediate routing segments by using `endArrow=none;` until the final segment into the destination workload.
 - Treat "almost touching" a container wall or service icon as a blocker. A connector should visibly meet the boundary or destination, not merely approach it.
@@ -134,6 +138,7 @@ Only produce a logical page when the user explicitly asks for one.
 - Default those OCI subnet boundaries to regional scope unless the user explicitly asks for AD-specific subnets.
 - For HA layouts across multiple ADs, keep the Oracle-style composition explicit: `Availability Domain` groupings should read as tall vertical background containers inside the VCN but outside the subnet boundaries, and the regional subnets should read as horizontal bands crossing those AD containers.
 - Keep traffic-flow arrows simple and intentional. Prefer a clear dedicated lane and fewer bends over a compact but broken-looking route.
+- Treat avoidable elbows as blockers. If the same relationship can be drawn as a straight connector, reroute before delivery.
 - Keep service labels visually snug to their icons. Default external labels to a minimal vertical gap and only add extra spacing when a multi-line label or nearby connector would otherwise collide.
 - For flows that cross subnet or VCN boundaries, prefer one clean orthogonal connector first. Use hidden `*-anchor` shapes only when the direct connector would otherwise look broken, crowded, diagonal, or ambiguous.
 - Treat one semantic relationship as one visible connector. Do not stitch a single flow out of multiple edge objects just to cross VCN, subnet, or OSN boundaries when one waypointed connector with optional hidden endpoint anchors can stay clean.

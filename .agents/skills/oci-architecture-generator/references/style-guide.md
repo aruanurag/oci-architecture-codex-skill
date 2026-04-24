@@ -26,13 +26,15 @@ This reference distills the Oracle-provided files bundled in `assets/drawio/`.
 ## Planning And Clarification
 
 - Before drafting the actual diagram, do a short plan pass.
-- Always ask 2 to 4 targeted clarification questions before authoring unless the user explicitly waives questions or the current thread already answered them.
+- After the plan pass, derive the clarification questions from the unresolved gaps instead of using a fixed script.
+- Ask the smallest useful set of targeted clarification questions before authoring, usually 1 to 4, unless the user explicitly waives questions or the current thread already answered them.
 - If there are no blocking questions, say so explicitly before authoring the spec.
 - Treat HA or DR posture, database type, and regional vs AD-specific subnet scope as layout-affecting inputs for OCI networked workloads.
 - Treat symmetry and stage-alignment preferences as layout-affecting inputs when the topology is staged, mirrored, or fanout-based.
 - Treat icon uncertainty as a real blocker when it could make the diagram misleading.
 - When no direct icon exists or the component itself is not fully understood, confirm with the user when possible and present recommended icon or placeholder options with the most honest one first.
 - Treat `closest` and `placeholder` icon resolutions as review findings that fail the clean-quality bar until they are explicitly disclosed and accepted.
+- Treat the required `clarification_gate` topics as recording buckets, not as a mandatory verbatim question list. If the plan or thread already settles a topic, record it with `thread_context`, `recommendation_accepted`, `assumed`, or `not_applicable` instead of asking a redundant question.
 
 ## Logical Diagram Guidance
 
@@ -63,6 +65,8 @@ Use physical pages for deployable infrastructure layout.
 - Increase the canvas and route connectors with waypoints before letting lines pile up on top of each other.
 - Keep icon labels close to the icon by default. Only open up extra vertical gap when a multi-line label or crossing connector needs the room.
 - Reserve dedicated traffic lanes when multiple arrows traverse the same area of the page.
+- Prefer straight connectors first and treat avoidable elbows as blockers.
+- If a connector truly must bend, keep the elbows orthogonal, aligned, and easy to justify.
 - Keep mirrored or repeated stages visually balanced. When queue and consumer tiers repeat, align them symmetrically before hand-tuning connectors.
 - Treat shared or nearly collinear lanes between different semantic flows as overlaps even if the automated quality checker does not flag them.
 - Represent one flow as one visible connector. Use waypointed routes and tiny hidden attach anchors instead of splitting the same relationship into several stitched connector objects.
