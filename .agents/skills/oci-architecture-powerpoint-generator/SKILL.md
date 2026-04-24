@@ -56,8 +56,8 @@ This skill is PowerPoint-native:
 10. If icon resolution returns `closest` or `placeholder`, or if you do not fully understand the requested component, pause before drafting the slide and confirm with the user when possible. Present one to three recommended icon choices or fallback shapes, explain the tradeoff briefly, and identify the most honest recommendation first.
 11. If the user has already authorized recommended choices up front, you may proceed with the top recommendation but still disclose it in the mapping table and notes.
 12. If the Oracle PowerPoint toolkit changes, rebuild the icon catalog with `python3 scripts/build_powerpoint_catalog.py` and the baseline-slide catalog with `python3 scripts/build_powerpoint_reference_catalog.py`.
-13. Author the JSON slide spec only after the planning and clarification gate is complete.
-14. Render with `python3 scripts/render_oci_powerpoint.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`.
+13. Author the JSON slide spec only after the planning and clarification gate is complete, and record the final questions, selected answers, and recommended options in the top-level `clarification_gate` object.
+14. Render with `python3 scripts/render_oci_powerpoint.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`. The renderer now refuses to render when the required `clarification_gate` is missing or incomplete.
 15. Export a preview image of the rendered `.pptx` and inspect it visually before delivery. Prefer `python3 scripts/export_powerpoint_preview.py --input ... --image-out ...` because it uses PowerPoint for the render pass before generating the image.
 16. Run a dedicated spacing and overlap review against the preview before sign-off:
    - verify every requested service resolved to an official OCI icon; treat `closest` and `placeholder` outcomes as blockers until they are disclosed and intentionally accepted

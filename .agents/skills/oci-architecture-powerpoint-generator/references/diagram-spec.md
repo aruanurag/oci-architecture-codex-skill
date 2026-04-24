@@ -7,6 +7,44 @@ Use this JSON contract when you want the skill to render a finalized `.pptx` wit
 ```json
 {
   "title": "Architecture name",
+  "clarification_gate": {
+    "status": "satisfied",
+    "notes": "Thread answers and recommendations were captured before rendering.",
+    "decisions": [
+      {
+        "topic": "availability",
+        "question": "Should this be HA, DR, or both?",
+        "recommended_option": "Single-region HA unless cross-region recovery is explicitly required.",
+        "selected_option": "Single-region multi-AD HA.",
+        "resolution_source": "user_answer",
+        "rationale": "The layout changes materially depending on whether DR is in scope."
+      },
+      {
+        "topic": "database",
+        "question": "Which database type should appear?",
+        "recommended_option": "Use Autonomous Database when the request names ADB or a managed OCI database.",
+        "selected_option": "Autonomous Database.",
+        "resolution_source": "user_answer",
+        "rationale": "The service icon and subnet placement depend on the database choice."
+      },
+      {
+        "topic": "subnet_scope",
+        "question": "Should the subnets be regional or AD-specific?",
+        "recommended_option": "Regional subnets unless AD-specific subnet framing is explicitly requested.",
+        "selected_option": "Regional subnets.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "This choice changes whether the slide clones subnet boxes per AD."
+      },
+      {
+        "topic": "icon_resolution",
+        "question": "If a direct icon does not exist, what should be used?",
+        "recommended_option": "Use a direct official OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+        "selected_option": "All requested services resolved directly, so no fallback was needed.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "The slide must disclose and intentionally accept any fallback icon choice."
+      }
+    ]
+  },
   "pages": [
     {
       "name": "Physical - Example",
@@ -20,6 +58,38 @@ Use this JSON contract when you want the skill to render a finalized `.pptx` wit
 ```
 
 Each `page` becomes one PowerPoint slide.
+
+## Clarification Gate
+
+The renderer now requires a top-level `clarification_gate` object before it will produce a `.pptx`.
+
+Use `status: "satisfied"` when the questions and recommendations were answered or intentionally accepted in the thread. Use `status: "waived"` only when the user explicitly chose to skip follow-up questions; in that case provide `waiver_reason`.
+
+When `status` is `satisfied`, `decisions` must include these topics:
+
+- `availability`
+- `database`
+- `subnet_scope`
+- `icon_resolution`
+
+Each decision must include:
+
+- `topic`
+- `question`
+- `recommended_option`
+- `selected_option`
+- `resolution_source`
+- `rationale`
+
+Allowed `resolution_source` values:
+
+- `user_answer`
+- `thread_context`
+- `recommendation_accepted`
+- `assumed`
+- `not_applicable`
+
+The intent is to make HA/DR posture, database choice, subnet framing, and missing-icon behavior explicit before rendering instead of burying those decisions in later notes.
 
 ## Page Fields
 

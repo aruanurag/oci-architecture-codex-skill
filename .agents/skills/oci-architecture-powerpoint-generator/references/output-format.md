@@ -104,6 +104,8 @@ Unless the user says otherwise:
 
 Include the renderable JSON spec when repeatability matters or when the slide may be iterated later.
 
+Include the top-level `clarification_gate` object in that spec so the recorded follow-up questions, recommended options, and selected answers are preserved with the renderable artifact.
+
 Use [diagram-spec.md](diagram-spec.md) for the contract.
 
 ## Preview Image
