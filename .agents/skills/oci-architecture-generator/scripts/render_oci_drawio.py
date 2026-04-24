@@ -32,6 +32,20 @@ NODE_OVERLAP_PADDING = 4.0
 PARENT_BOUNDARY_TOLERANCE = 2.0
 PARENT_CENTER_TOLERANCE = 1.0
 MAX_EDGE_BENDS = 3
+REQUIRED_CLARIFICATION_TOPICS = (
+    "availability",
+    "database",
+    "subnet_scope",
+    "icon_resolution",
+)
+ALLOWED_CLARIFICATION_GATE_STATUSES = {"satisfied", "waived"}
+ALLOWED_DECISION_RESOLUTION_SOURCES = {
+    "user_answer",
+    "thread_context",
+    "recommendation_accepted",
+    "assumed",
+    "not_applicable",
+}
 
 TEXT_STYLE = (
     "whiteSpace=wrap;html=1;strokeColor=none;fillColor=none;align=center;"
@@ -170,6 +184,61 @@ def strip_html(value: str) -> str:
 
 def text_to_html(value: str) -> str:
     return html.escape(value).replace("\n", "<br>")
+
+
+def require_non_empty_string(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
+    return value.strip()
+
+
+def validate_clarification_gate(spec: dict[str, Any]) -> None:
+    gate = spec.get("clarification_gate")
+    if not isinstance(gate, dict):
+        raise ValueError("Spec must include a top-level clarification_gate object before rendering.")
+
+    status = require_non_empty_string(gate.get("status"), "clarification_gate.status").lower()
+    if status not in ALLOWED_CLARIFICATION_GATE_STATUSES:
+        allowed = ", ".join(sorted(ALLOWED_CLARIFICATION_GATE_STATUSES))
+        raise ValueError(f"clarification_gate.status must be one of: {allowed}.")
+
+    require_non_empty_string(gate.get("notes"), "clarification_gate.notes")
+
+    if status == "waived":
+        require_non_empty_string(gate.get("waiver_reason"), "clarification_gate.waiver_reason")
+        return
+
+    decisions = gate.get("decisions")
+    if not isinstance(decisions, list) or not decisions:
+        raise ValueError("clarification_gate.decisions must be a non-empty list when status is 'satisfied'.")
+
+    seen_topics: set[str] = set()
+    for index, decision in enumerate(decisions, start=1):
+        if not isinstance(decision, dict):
+            raise ValueError(f"clarification_gate.decisions[{index}] must be an object.")
+
+        prefix = f"clarification_gate.decisions[{index}]"
+        topic = require_non_empty_string(decision.get("topic"), f"{prefix}.topic").lower()
+        if topic in seen_topics:
+            raise ValueError(f"{prefix}.topic duplicates '{topic}'. Each clarification topic must appear only once.")
+        seen_topics.add(topic)
+
+        require_non_empty_string(decision.get("question"), f"{prefix}.question")
+        require_non_empty_string(decision.get("recommended_option"), f"{prefix}.recommended_option")
+        require_non_empty_string(decision.get("selected_option"), f"{prefix}.selected_option")
+        resolution_source = require_non_empty_string(decision.get("resolution_source"), f"{prefix}.resolution_source").lower()
+        if resolution_source not in ALLOWED_DECISION_RESOLUTION_SOURCES:
+            allowed = ", ".join(sorted(ALLOWED_DECISION_RESOLUTION_SOURCES))
+            raise ValueError(f"{prefix}.resolution_source must be one of: {allowed}.")
+        require_non_empty_string(decision.get("rationale"), f"{prefix}.rationale")
+
+    missing_topics = [topic for topic in REQUIRED_CLARIFICATION_TOPICS if topic not in seen_topics]
+    if missing_topics:
+        joined = ", ".join(missing_topics)
+        raise ValueError(
+            "clarification_gate.decisions is missing required topics: "
+            f"{joined}. Record the selected and recommended options before rendering."
+        )
 
 
 def library_role(icon_title: str | None) -> str:
@@ -579,6 +648,7 @@ class DrawioRenderer:
         return value
 
     def render_spec(self, spec: dict[str, Any]) -> tuple[ET.Element, list[dict[str, Any]]]:
+        validate_clarification_gate(spec)
         self._next_id = 2
         created = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         mxfile = ET.Element(

@@ -17,6 +17,53 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 EXAMPLE_SPECS = SKILL_DIR / "assets" / "examples" / "specs"
 
 
+def build_clarification_gate(
+    *,
+    availability: str = "Single-region deployment decisions are either simplified for this renderer test or not materially under test.",
+    database: str = "No database choice is required for this renderer test unless the specific fixture says otherwise.",
+    subnet_scope: str = "Regional subnet scope is assumed unless the fixture explicitly requires AD-specific framing.",
+    icon_resolution: str = "Use a direct OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+) -> dict[str, object]:
+    return {
+        "status": "satisfied",
+        "notes": "Renderer test fixture clarification gate.",
+        "decisions": [
+            {
+                "topic": "availability",
+                "question": "Should this test represent HA, DR, or neither?",
+                "recommended_option": "Keep the fixture as simple as possible unless the test explicitly requires HA or DR semantics.",
+                "selected_option": availability,
+                "resolution_source": "not_applicable",
+                "rationale": "The guardrail exists to exercise renderer behavior rather than architecture discovery.",
+            },
+            {
+                "topic": "database",
+                "question": "Which database type should appear in this test?",
+                "recommended_option": "If no database behavior is under test, record that no database choice is in scope.",
+                "selected_option": database,
+                "resolution_source": "not_applicable",
+                "rationale": "The clarification gate must still record the database decision explicitly.",
+            },
+            {
+                "topic": "subnet_scope",
+                "question": "Should subnet framing be regional or AD-specific?",
+                "recommended_option": "Use regional subnets unless the test explicitly requires AD-specific subnet framing.",
+                "selected_option": subnet_scope,
+                "resolution_source": "recommendation_accepted",
+                "rationale": "Regional subnets are the default OCI assumption for these renderer fixtures.",
+            },
+            {
+                "topic": "icon_resolution",
+                "question": "If a direct icon is missing, what should this test use?",
+                "recommended_option": "Use a direct OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+                "selected_option": icon_resolution,
+                "resolution_source": "recommendation_accepted",
+                "rationale": "The renderer should always have an explicit icon-resolution rule before rendering.",
+            },
+        ],
+    }
+
+
 class RenderDrawioTests(unittest.TestCase):
     def render_example(self, name: str) -> tuple[Path, list[dict[str, object]], dict[str, object]]:
         spec_path = EXAMPLE_SPECS / f"{name}.json"
@@ -34,6 +81,8 @@ class RenderDrawioTests(unittest.TestCase):
         output_path = temp_dir / f"{name}.drawio"
         report_path = temp_dir / f"{name}.report.json"
 
+        spec = dict(spec)
+        spec.setdefault("clarification_gate", build_clarification_gate())
         spec_path.write_text(json.dumps(spec))
         report = render_spec_to_file(spec_path, output_path, report_path)
         validation = validate_drawio_file(output_path)
@@ -116,43 +165,61 @@ class RenderDrawioTests(unittest.TestCase):
         self.assertIn("Document Understanding", page_xml)
 
     def test_external_labels_hide_internal_snippet_text(self) -> None:
+        output_path, _, _ = self.render_temp_spec(
+            "external-labels",
+            {
+                "title": "External Labels",
+                "pages": [
+                    {
+                        "name": "Physical - External Labels",
+                        "page_type": "physical",
+                        "width": 400,
+                        "height": 240,
+                        "elements": [
+                            {
+                                "id": "dns",
+                                "query": "DNS",
+                                "x": 120,
+                                "y": 40,
+                                "w": 90,
+                                "h": 90,
+                                "external_label": "Global DNS",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        values = self.plain_values(output_path)
+
+        self.assertIn("Global DNS", values)
+        self.assertNotIn("DNS", values)
+
+    def test_missing_clarification_gate_is_rejected(self) -> None:
         temp_dir = Path(tempfile.mkdtemp(prefix="oci-drawio-test-"))
-        spec_path = temp_dir / "external-labels.json"
-        output_path = temp_dir / "external-labels.drawio"
-        report_path = temp_dir / "external-labels.report.json"
+        spec_path = temp_dir / "missing-clarification-gate.json"
+        output_path = temp_dir / "missing-clarification-gate.drawio"
+        report_path = temp_dir / "missing-clarification-gate.report.json"
 
         spec_path.write_text(
             json.dumps(
                 {
-                    "title": "External Labels",
+                    "title": "Missing Clarification Gate",
                     "pages": [
                         {
-                            "name": "Physical - External Labels",
+                            "name": "Physical - Missing Clarification Gate",
                             "page_type": "physical",
                             "width": 400,
                             "height": 240,
-                            "elements": [
-                                {
-                                    "id": "dns",
-                                    "query": "DNS",
-                                    "x": 120,
-                                    "y": 40,
-                                    "w": 90,
-                                    "h": 90,
-                                    "external_label": "Global DNS",
-                                }
-                            ],
+                            "elements": [],
                         }
                     ],
                 }
             )
         )
 
-        render_spec_to_file(spec_path, output_path, report_path)
-        values = self.plain_values(output_path)
-
-        self.assertIn("Global DNS", values)
-        self.assertNotIn("DNS", values)
+        with self.assertRaisesRegex(ValueError, "clarification_gate"):
+            render_spec_to_file(spec_path, output_path, report_path)
 
     def test_mushop_example_renders_with_reference_components(self) -> None:
         output_path, report, validation = self.render_example("mushop-oke-ecommerce")

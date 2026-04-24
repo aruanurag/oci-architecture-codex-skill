@@ -27,9 +27,12 @@ This reference distills the Oracle-provided files bundled in `assets/drawio/`.
 
 - Before drafting the actual diagram, do a short plan pass.
 - Always ask 2 to 4 targeted clarification questions before authoring unless the user explicitly waives questions or the current thread already answered them.
-- Treat regional vs AD-specific subnet scope as a layout-affecting input for OCI networked workloads.
+- If there are no blocking questions, say so explicitly before authoring the spec.
+- Treat HA or DR posture, database type, and regional vs AD-specific subnet scope as layout-affecting inputs for OCI networked workloads.
 - Treat symmetry and stage-alignment preferences as layout-affecting inputs when the topology is staged, mirrored, or fanout-based.
-- Treat icon uncertainty as a blocker when it could make the diagram misleading.
+- Treat icon uncertainty as a real blocker when it could make the diagram misleading.
+- When no direct icon exists or the component itself is not fully understood, confirm with the user when possible and present recommended icon or placeholder options with the most honest one first.
+- Treat `closest` and `placeholder` icon resolutions as review findings that fail the clean-quality bar until they are explicitly disclosed and accepted.
 
 ## Logical Diagram Guidance
 
@@ -54,7 +57,7 @@ Use physical pages for deployable infrastructure layout.
 - Default OCI subnet boundaries to regional scope unless the user explicitly requests AD-specific subnets.
 - Attach `Internet Gateway`, `NAT Gateway`, and `Service Gateway` to the VCN edge by default, even when subnet boundaries are also shown. Let the VCN border line pass through the gateway icon center instead of leaving the icon fully inside the VCN.
 - Keep public-facing resources inside public subnets and application or data tiers inside private subnets.
-- For single-region multi-AD HA, let one regional subnet span the ADs by default and show AD placement with the official Oracle `Availability Domain` grouping shapes as tall vertical containers inside the VCN, while the regional subnets span horizontally across them. Match the Oracle HA sample treatment rather than drawing one subnet per AD.
+- For single-region multi-AD HA, let one regional subnet span the ADs by default and show AD placement with the official Oracle `Availability Domain` grouping shapes as tall vertical background containers inside the VCN but outside the subnet boundaries, while the regional subnets span horizontally across them. Match the Oracle HA sample treatment rather than drawing one subnet per AD.
 - Add extra private subnets for data, cache, or observability tiers when that reduces crowding and makes the network clearer.
 - In HA layouts, leave a visible left-side label gutter so subnet names and CIDRs stay readable before the AD grouping columns begin.
 - Increase the canvas and route connectors with waypoints before letting lines pile up on top of each other.
@@ -66,9 +69,48 @@ Use physical pages for deployable infrastructure layout.
 - Do not let a connector visually sit on top of a VCN, subnet, or dashed workload-container border. Use a dedicated lane instead of sharing the boundary line.
 - Do not layer standalone `Route Table` or `Security List` icons on top of subnet groupings that already render those markers on the subnet boundary. Duplicate `RT` or `SL` visuals are blockers.
 - If a direct connector into a service icon makes the arrowhead kink, tilt, or stop awkwardly near the destination, use a tiny invisible attach anchor on the service boundary so the visible connector still reads as one clean machine-routed line.
+- For multi-AD OKE layouts, represent `OKE` as a cluster-level container in the application subnet and place worker-node elements inside it with one worker grouping per AD.
+- Keep worker-node icons especially close to the Oracle aspect ratio. If they look horizontally stretched, shrink width first rather than flattening the icon further.
 - Export the physical page and inspect it visually. If any route looks detached, ambiguous, broken by labels, or unnecessarily overlapped, reroute and rerender.
 - Prefer more whitespace and clearer attachment points over compactness.
 - Use geometry placeholders only when there is no direct OCI icon.
+
+## Architectural Review
+
+- Treat architecture review as a required gate, not an optional afterthought.
+- Do not place compute tiers in a public subnet for a production-style web app unless the user explicitly asks for public compute.
+- For 3-tier application patterns, prefer regional `public ingress`, `private web`, `private app`, and `private data` subnet placement unless the user explicitly asks for AD-specific subnets.
+- If the workload is single-region and multi-AD, do not imply AD-scoped subnet boundaries unless the request explicitly called for AD-specific subnets. Still make the AD split visually explicit with aligned per-AD placement cues and vertical AD background grouping boxes.
+- If HA or DR is requested or implied, represent it explicitly with OCI-native constructs such as multiple nodes, instance pools, ADs, fault domains, or standby regions.
+- Do not let labels imply resilience or security posture that the diagram does not visibly support.
+- For internet-facing applications, consider whether WAF, DNS or certificate flow, and egress controls are necessary to keep the design architecturally honest.
+- If a simplifying omission is intentional, keep the labels and summary honest about that simplification.
+
+## Spacing And Overlap Review
+
+- Treat spacing and overlap review as a required visual gate, separate from architecture review and separate from the renderer quality check.
+- Run it on an exported visual output, not only on the JSON spec or renderer report.
+- Check spacing between external location groups and ingress services so elements like `Internet`, `Clients`, and `WAF` do not crowd or visually merge.
+- Check that every requested service resolved to an official OCI icon and that any fallback or placeholder is explicitly called out.
+- Check spacing between icons and labels so native snippet labels do not collide with connectors, neighboring icons, or grouping borders.
+- Check spacing between subnet labels, AD background lanes, cluster containers, and service icons so background structure stays visually behind the foreground content.
+- Treat any overlap between unrelated icons, labels, grouping boxes, connectors, arrowheads, or location boundaries as a blocker.
+- Treat overlaps between separate top-level icons or location groups as blockers even when they are not siblings in the JSON structure.
+- Treat near-touches that read as overlap at presentation scale as blockers even when the underlying geometry technically clears.
+- If a spacing fix would require stretching an icon, move or resize the surrounding layout instead and preserve the icon’s aspect ratio.
+
+## Review Loop
+
+- Do not stop after the first render.
+- Perform an architecture review after the first coherent render.
+- Run the renderer quality check.
+- Export the physical page and inspect it visually.
+- Perform a dedicated spacing and overlap review on that export before declaring the diagram clean.
+- Fix architectural issues before treating the diagram as final, even if the linework is already clean.
+- Reroute and rerender until the linework, spacing, labels, overlaps, and containment are clean.
+- Treat two consecutive clean quality passes as the minimum bar, not the usual stopping point.
+- Increase the review count after any recent icon-resolution issue, overlap, avoidable elbow, or other material regression.
+- After a material fix, restart the clean-pass count and require fresh clean reviews.
 
 ## Fallback Policy
 

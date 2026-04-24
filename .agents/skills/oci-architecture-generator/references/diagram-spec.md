@@ -7,6 +7,44 @@ Use this JSON contract when you want the skill to render a finished `.drawio` fi
 ```json
 {
   "title": "Architecture name",
+  "clarification_gate": {
+    "status": "satisfied",
+    "notes": "Thread answers and recommendations were captured before rendering.",
+    "decisions": [
+      {
+        "topic": "availability",
+        "question": "Should this be HA, DR, or both?",
+        "recommended_option": "Single-region HA unless cross-region recovery is explicitly required.",
+        "selected_option": "Single-region multi-AD HA.",
+        "resolution_source": "user_answer",
+        "rationale": "The layout changes materially depending on whether DR is in scope."
+      },
+      {
+        "topic": "database",
+        "question": "Which database type should appear?",
+        "recommended_option": "Use Autonomous Database when the request names ADB or a managed OCI database.",
+        "selected_option": "Autonomous Database.",
+        "resolution_source": "user_answer",
+        "rationale": "The service icon and subnet placement depend on the database choice."
+      },
+      {
+        "topic": "subnet_scope",
+        "question": "Should the subnets be regional or AD-specific?",
+        "recommended_option": "Regional subnets unless AD-specific subnet framing is explicitly requested.",
+        "selected_option": "Regional subnets.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "This choice changes whether the diagram clones subnet boxes per AD."
+      },
+      {
+        "topic": "icon_resolution",
+        "question": "If a direct icon does not exist, what should be used?",
+        "recommended_option": "Use a direct official OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+        "selected_option": "All requested services resolved directly, so no fallback was needed.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "The diagram must disclose and intentionally accept any fallback icon choice."
+      }
+    ]
+  },
   "pages": [
     {
       "name": "Logical - Example",
@@ -18,6 +56,38 @@ Use this JSON contract when you want the skill to render a finished `.drawio` fi
   ]
 }
 ```
+
+## Clarification Gate
+
+The renderer now requires a top-level `clarification_gate` object before it will produce a `.drawio`.
+
+Use `status: "satisfied"` when the questions and recommendations were answered or intentionally accepted in the thread. Use `status: "waived"` only when the user explicitly chose to skip follow-up questions; in that case provide `waiver_reason`.
+
+When `status` is `satisfied`, `decisions` must include these topics:
+
+- `availability`
+- `database`
+- `subnet_scope`
+- `icon_resolution`
+
+Each decision must include:
+
+- `topic`
+- `question`
+- `recommended_option`
+- `selected_option`
+- `resolution_source`
+- `rationale`
+
+Allowed `resolution_source` values:
+
+- `user_answer`
+- `thread_context`
+- `recommendation_accepted`
+- `assumed`
+- `not_applicable`
+
+The intent is to make HA or DR posture, database choice, subnet framing, and missing-icon behavior explicit before rendering instead of burying those decisions in later notes.
 
 ## Page Fields
 
@@ -68,6 +138,7 @@ Fallback behavior is automatic:
 4. placeholder shape when no honest official mapping exists for a physical component
 
 On physical diagrams, prefer explicit VCN and subnet groupings with CIDR labels, and place public and private resources inside the appropriate subnet boxes.
+For multi-AD HA inside one region, keep regional subnets as horizontal bands and place the official `Availability Domain` grouping shapes as tall vertical background containers inside the VCN but outside the subnet boundaries.
 
 Sizing notes:
 
@@ -143,6 +214,7 @@ Use hidden anchors as routing primitives on subnet, VCN, tier, or region boundar
 For boundary-attached OCI network controls such as `Internet Gateway`, `NAT Gateway`, and `Service Gateway`, prefer placing the icon directly on the relevant subnet or VCN border instead of drawing a short connector line into that same boundary. Use an explicit edge only when the gateway participates in a larger traffic lane that must be shown.
 
 When a container stands for an OKE cluster, place the official `Container Engine for Kubernetes` icon in the container header area or as a container badge. Treat it as the cluster's identifying icon, not as a separate floating service node disconnected from the container. When the icon is being used purely as a badge, set `hide_internal_label: true` so the snippet text does not render as a second pseudo-node label.
+When OKE spans multiple ADs, represent it as one cluster container inside the application subnet and place worker-node groupings inside it with one grouping per AD. Keep worker-node icons at an honest aspect ratio instead of stretching them to fill the container.
 
 ### Edges
 
@@ -185,7 +257,7 @@ When a physical edge crosses a container boundary:
 ## Recommended Workflow
 
 1. Resolve icon uncertainty with `scripts/resolve_oci_icon.py`.
-2. Author the JSON spec.
+2. Author the JSON spec only after the clarification gate is complete, and record the follow-up questions, recommended options, and selected answers in `clarification_gate`.
 3. Render the final diagram and quality-check it:
 
 ```bash
@@ -199,8 +271,10 @@ python3 scripts/render_oci_drawio.py \
 
 4. Validate with `scripts/test_render_oci_drawio.py` or `validate_drawio_file(...)`.
 5. If the quality review fails, fix the spec and rerender until it passes.
-6. After the first passing quality review, do one more rerender and require a second passing quality review before delivery.
-7. Export the physical page to PNG and do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, icon sizing, child containment within parent boundaries, and label collisions.
+6. Export the physical page to PNG and run a dedicated spacing and overlap review focused on ingress spacing, labels, AD background lanes, cluster containers, and unrelated overlaps.
+7. Run an architectural review focused on public versus private placement, regional versus AD-specific subnet truth, HA or DR honesty, and any material ingress or security omissions.
+8. After the first passing quality review, do one more rerender and require a second passing quality review before delivery.
+9. Do at least one final visual confirmatory pass focused on arrowheads, traffic-flow routing, boundary attachment, icon sizing, child containment within parent boundaries, and label collisions.
 
 ## Bundled Examples
 

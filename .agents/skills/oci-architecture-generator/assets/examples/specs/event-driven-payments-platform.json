@@ -1,5 +1,43 @@
 {
   "title": "Event-Driven Payments Platform",
+  "clarification_gate": {
+    "status": "satisfied",
+    "notes": "Bundled example clarification gate.",
+    "decisions": [
+      {
+        "topic": "availability",
+        "question": "Should this example represent HA, DR, or both?",
+        "recommended_option": "Use the availability posture already implied by the bundled example layout unless the example explicitly focuses on DR.",
+        "selected_option": "Use the availability posture already implied by the example layout.",
+        "resolution_source": "thread_context",
+        "rationale": "Bundled examples keep the resilience posture explicit enough for renderable reference output."
+      },
+      {
+        "topic": "database",
+        "question": "Which database type should appear?",
+        "recommended_option": "Use the database service or services already named in the bundled example.",
+        "selected_option": "Use the database service or services already named in the example layout.",
+        "resolution_source": "thread_context",
+        "rationale": "The example already encodes the intended OCI data-service choice."
+      },
+      {
+        "topic": "subnet_scope",
+        "question": "Should the subnets be regional or AD-specific?",
+        "recommended_option": "Regional subnets unless the example explicitly calls for AD-specific subnet framing.",
+        "selected_option": "Regional subnets.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "Bundled draw.io examples default to regional subnet framing unless a different pattern is the point of the example."
+      },
+      {
+        "topic": "icon_resolution",
+        "question": "If a direct icon does not exist, what should be used?",
+        "recommended_option": "Use a direct official OCI icon first, then the closest honest official fallback, then a clearly labeled placeholder.",
+        "selected_option": "Use direct official icons where available and disclose placeholders or fallbacks when required.",
+        "resolution_source": "recommendation_accepted",
+        "rationale": "Bundled examples must keep fallback behavior explicit instead of silently swapping icons."
+      }
+    ]
+  },
   "pages": [
     {
       "name": "Physical - Event-Driven Payments Platform",
