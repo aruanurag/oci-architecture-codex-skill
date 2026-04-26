@@ -2,6 +2,8 @@
 
 Use this package shape unless the user asks for something different.
 
+When the request includes a specific Oracle solution link or another explicit reference, switch into reference replication mode. Read `references/oracle-solution-patterns.md`, extract a structured `Reference Summary`, synthesize a `Recreation Prompt`, and report a `Reference Alignment Review` with a `0-100` similarity score, the key differences, and the next meaningful improvements after each material render.
+
 ## Default Package
 
 1. Planning Summary
@@ -15,6 +17,25 @@ Use this package shape unless the user asks for something different.
 9. Preview Image
 10. Icon Mapping Table
 11. Placeholder and Gap Notes
+
+## Reference Replication Mode Additions
+
+When the request is tied to a specific Oracle reference, add these sections to the package:
+
+1. Reference Summary
+2. Recreation Prompt
+3. Reference Alignment Review
+
+The `Reference Alignment Review` should include:
+
+- `Similarity Score` from `0` to `100`
+- missing or extra components
+- structural or layout differences
+- flow mismatches
+- icon, grouping, or subnet-scope mismatches
+- the next meaningful fixes to apply
+
+Stop iterating when similarity reaches `>= 95`, when no meaningful improvement remains, or after `10` iterations.
 
 ## Planning Summary
 

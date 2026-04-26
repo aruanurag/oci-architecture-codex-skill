@@ -67,18 +67,20 @@
         {
           "id": "waf",
           "query": "WAF",
-          "x": 245,
-          "y": 216,
+          "x": 240,
+          "y": 226,
           "w": 85,
           "h": 88,
-          "external_label": "WAF"
+          "external_label": "WAF",
+          "external_label_width": 96,
+          "external_label_height": 28
         },
         {
           "id": "region",
           "query": "region",
-          "x": 350,
+          "x": 320,
           "y": 55,
-          "w": 1180,
+          "w": 1120,
           "h": 780,
           "value": "<b>OCI Region</b>"
         },
@@ -133,50 +135,6 @@
           "value": "<b>Private DB Subnet</b><br/>10.0.4.0/24"
         },
         {
-          "id": "public-rt-sl",
-          "query": "route table and security list",
-          "label": "RT + SL",
-          "parent": "vcn",
-          "boundary_parent": "public-ingress-subnet",
-          "boundary_side": "top",
-          "x": 820,
-          "w": 90,
-          "h": 52
-        },
-        {
-          "id": "web-rt-sl",
-          "query": "route table and security list",
-          "label": "RT + SL",
-          "parent": "vcn",
-          "boundary_parent": "web-subnet",
-          "boundary_side": "top",
-          "x": 820,
-          "w": 90,
-          "h": 52
-        },
-        {
-          "id": "app-rt-sl",
-          "query": "route table and security list",
-          "label": "RT + SL",
-          "parent": "vcn",
-          "boundary_parent": "app-subnet",
-          "boundary_side": "top",
-          "x": 820,
-          "w": 90,
-          "h": 52
-        },
-        {
-          "id": "db-rt-sl",
-          "query": "route table and security list",
-          "label": "RT + SL",
-          "parent": "vcn",
-          "boundary_parent": "db-subnet",
-          "boundary_side": "top",
-          "x": 820,
-          "w": 90,
-          "h": 52
-        },
-        {
           "id": "igw",
           "query": "internet gateway",
           "parent": "region",
@@ -210,41 +168,49 @@
           "id": "lb",
           "query": "load balancer",
           "parent": "public-ingress-subnet",
-          "x": 170,
+          "x": 110,
           "y": 9,
           "w": 160,
           "h": 92,
-          "external_label": "Public Load Balancer"
+          "external_label": "Public Load Balancer",
+          "external_label_width": 190,
+          "external_label_height": 30
         },
         {
           "id": "web-tier",
           "query": "instance pools",
           "parent": "web-subnet",
-          "x": 170,
+          "x": 110,
           "y": 5,
           "w": 160,
           "h": 110,
-          "external_label": "Web Tier Pool\n(2x VM / FDs)"
+          "external_label": "Web Tier Pool\n(2x VM / FDs)",
+          "external_label_width": 190,
+          "external_label_height": 48
         },
         {
           "id": "app-tier",
           "query": "instance pools",
           "parent": "app-subnet",
-          "x": 170,
+          "x": 110,
           "y": 5,
           "w": 160,
           "h": 110,
-          "external_label": "App Tier Pool\n(2x VM / FDs)"
+          "external_label": "App Tier Pool\n(2x VM / FDs)",
+          "external_label_width": 190,
+          "external_label_height": 48
         },
         {
           "id": "adb",
           "query": "autonomous database",
           "parent": "db-subnet",
-          "x": 170,
+          "x": 110,
           "y": 3,
           "w": 160,
           "h": 118,
-          "external_label": "Autonomous Database"
+          "external_label": "Autonomous Database",
+          "external_label_width": 190,
+          "external_label_height": 34
         },
         {
           "type": "edge",

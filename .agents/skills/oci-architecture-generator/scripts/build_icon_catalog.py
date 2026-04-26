@@ -27,6 +27,7 @@ SUPPLEMENTAL_ICONS = [
     {"title": "Migration - Estate Explorer", "source": "toolkit-v24.2-icons-page"},
     {"title": "Migration - Oracle Database Migration Service", "source": "toolkit-v24.2-icons-page"},
     {"title": "Analytics and AI - Document Understanding", "source": "toolkit-v24.2-icons-page"},
+    {"title": "Analytics and AI - Data Flow", "source": "toolkit-v24.2-icons-page"},
     {"title": "Analytics and AI - Forecasting", "source": "toolkit-v24.2-icons-page"},
     {"title": "Analytics and AI - Generative AI", "source": "toolkit-v24.2-icons-page"},
     {"title": "Analytics and AI - OCI Language", "source": "toolkit-v24.2-icons-page"},

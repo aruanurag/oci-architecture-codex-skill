@@ -79,6 +79,7 @@ COMMON_ALIASES = {
     "oci generative ai": "Analytics and AI - OCI Generative AI",
     "genai": "Analytics and AI - OCI Generative AI",
     "generative ai": "Analytics and AI - Generative AI",
+    "oci data flow": "Analytics and AI - Data Flow",
     "language": "Analytics and AI - OCI Language",
     "speech": "Analytics and AI - OCI Speech",
     "vision": "Analytics and AI - OCI Vision",

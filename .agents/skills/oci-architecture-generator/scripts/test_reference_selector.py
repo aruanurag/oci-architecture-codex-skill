@@ -49,6 +49,38 @@ class ReferenceSelectorTests(unittest.TestCase):
         supporting = {item["path"].split("/")[-1] for item in bundle["supplemental"]}
         self.assertIn("cloudany-migration-dr-logical-arch.drawio", supporting)
 
+    def test_genai_platform_query_prefers_llm_reference(self) -> None:
+        matches = rank_references(
+            "secure and scalable LLM platform on OCI with Generative AI, OKE, Data Science, AI database, and Object Storage"
+        )
+        self.assertEqual(matches[0]["path"].split("/")[-1], "ai-llm-workflow-architecture.drawio")
+
+    def test_gitops_query_prefers_oke_reference(self) -> None:
+        matches = rank_references("GitOps with Argo CD on OKE using GitHub, a load balancer, and private worker nodes")
+        self.assertEqual(matches[0]["path"].split("/")[-1], "oke-architecture-diagram.drawio")
+
+    def test_wls_marketplace_query_prefers_oke_reference(self) -> None:
+        matches = rank_references(
+            "WebLogic on OKE marketplace with Jenkins, bastion, public load balancer, private load balancer, and file storage"
+        )
+        self.assertEqual(matches[0]["path"].split("/")[-1], "oke-architecture-diagram.drawio")
+
+    def test_dicom_query_prefers_oke_primary_with_hybrid_support(self) -> None:
+        bundle = select_reference_bundle(
+            "cloud native DICOM store on OCI with Orthanc, PostgreSQL, OKE, API Gateway, and FastConnect"
+        )
+        self.assertIsNotNone(bundle["primary"])
+        self.assertEqual(bundle["primary"]["path"].split("/")[-1], "oke-architecture-diagram.drawio")
+
+        supporting = {item["path"].split("/")[-1] for item in bundle["supplemental"]}
+        self.assertIn("hub-spoke-oci.drawio", supporting)
+
+    def test_exadata_azure_query_prefers_cross_cloud_reference(self) -> None:
+        matches = rank_references(
+            "cross-region disaster recovery for Exadata Database Service on Oracle Database at Azure with AKS and Data Guard"
+        )
+        self.assertEqual(matches[0]["path"].split("/")[-1], "exadb-dr-on-db-at-azure.drawio")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,17 +9,23 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Reuse the closest Oracle sample/reference slide as a starting layout when the request clearly matches one.
 - Keep the deck in 16:9 landscape format unless the user explicitly asks for portrait.
 - Prefer Oracle’s built-in label styling inside copied icon groups when possible.
+- When the user supplies a specific Oracle solution link or another explicit reference, treat that reference as the source of truth for the component set, topology, and major traffic flows.
+- Treat sparse, wireframe-looking, or text-card-dominated slides as blockers even when the topology is correct.
+- Treat a preview where an expected official icon is visually blank, clipped, or effectively replaced by a floating label card as a blocker.
 
 ## Planning And Clarification
 
 - Before drafting the actual diagram, do a short plan pass.
-- Always ask 2 to 4 targeted clarification questions before authoring unless the user explicitly waives questions or the current thread already answered them.
+- Derive the clarification questions from the planning pass instead of using a hardcoded script.
+- Always ask the smallest useful set of targeted clarification questions, usually 1 to 4, before authoring unless the user explicitly waives questions or the current thread already answered them.
 - If there are no blocking questions, say so explicitly before creating the slide spec.
+- Present recommendations as part of the clarification pass. Lead with the most honest recommended choice before recording the selected answer, accepted recommendation, or explicit assumption.
 - Treat regional vs AD-specific subnet scope as a layout-affecting input for OCI networked workloads.
 - Treat icon uncertainty as a real blocker when it could make the diagram misleading.
 - When no direct icon exists or the component itself is not fully understood, confirm with the user when possible and present recommended icon or placeholder options with the most honest one first.
 - Treat `closest` and `placeholder` icon resolutions as review findings that fail the clean-quality bar until they are explicitly disclosed and accepted.
 - Treat symmetry and stage-alignment preferences as layout-affecting inputs when the topology is staged, mirrored, or fanout-based.
+- In reference replication mode, extract a structured reference summary first, then write a recreation prompt, then score each rendered slide against the reference. Prefer near-exact replication over creative embellishment when the Oracle reference is explicit.
 
 ## Physical Diagram Defaults
 
@@ -64,6 +70,7 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Use transparent, no-fill connector labels and keep them single-line where practical.
 - Do not let connectors overlap container borders or cut through unrelated icons.
 - Treat any connector segment that rides along a container border as a blocker.
+- Treat labels, service cards, or titles that sit directly on a primary connector lane as blockers.
 
 ## Layout Quality
 
@@ -76,6 +83,7 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Do not let publish, consume, and database-write paths ride the same lane just because they fit geometrically. Separate them into distinct lanes or a dedicated bus so the reader can parse them at a glance.
 - Shorten labels and reduce font size before accepting awkward heading wraps.
 - Do not overcrowd subnets or tiers.
+- Do not accept slides that leave oversized empty rectangles with too little foreground content for the claimed architecture.
 - Do not stretch icons out of proportion.
 - For multi-AD OKE layouts, represent `OKE` as a cluster-level container in the app subnet and place worker-node elements inside it with one worker grouping per AD.
 - Keep worker-node icons especially close to the Oracle aspect ratio; if they look horizontally stretched, shrink width first rather than flattening the icon further.
@@ -91,6 +99,8 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Check that every requested service resolved to an official OCI icon and that any fallback or placeholder is explicitly called out.
 - Check spacing between icons and labels so native Oracle labels do not collide with connectors, neighboring icons, or grouping borders.
 - Check spacing between subnet labels, AD background lanes, cluster containers, and service icons so background structure stays visually behind the foreground content.
+- Check that expected icon regions actually contain visible icon content in the preview instead of blank or nearly blank areas.
+- Reject slides that still read as sparse scaffolding or a diagram made mostly of detached label cards.
 - Treat any overlap between unrelated icons, labels, grouping boxes, connectors, arrowheads, or location boundaries as a blocker.
 - Treat overlaps between separate top-level icons or location groups as blockers even when they are not siblings in the JSON structure.
 - Treat near-touches that read as overlap at presentation scale as blockers even when the underlying geometry technically clears.
@@ -110,7 +120,8 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Do not stop after the first render.
 - Perform an architecture review after the first coherent render.
 - Run the renderer quality check.
-- Export a preview image of the slide through PowerPoint, not just a direct `.pptx` thumbnail path, because nested Oracle vector groups can render incompletely in simpler preview engines.
+- Export a preview image of the slide through PowerPoint when possible, not just a direct `.pptx` thumbnail path, because nested Oracle vector groups can render incompletely in simpler preview engines.
+- If the preview helper falls back to `Backend: quicklook-pptx`, treat icon-visibility findings as lower-confidence and confirm spacing, overlap, and routing against the PowerPoint geometry report plus a sibling draw.io shadow review before declaring the slide invalid.
 - Inspect the preview visually.
 - Perform a dedicated spacing and overlap review on that preview before declaring the slide clean.
 - Fix architectural issues before treating the diagram as final, even if the linework is already clean.

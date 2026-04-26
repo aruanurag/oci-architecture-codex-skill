@@ -195,6 +195,228 @@ class RenderDrawioTests(unittest.TestCase):
         self.assertIn("Global DNS", values)
         self.assertNotIn("DNS", values)
 
+    def test_toolkit_supplement_icons_keep_honest_dimensions(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "toolkit-supplement-icon-dimensions",
+            {
+                "title": "Toolkit Supplement Dimensions",
+                "pages": [
+                    {
+                        "name": "Physical - Toolkit Supplement Dimensions",
+                        "page_type": "physical",
+                        "width": 600,
+                        "height": 320,
+                        "elements": [
+                            {
+                                "id": "pg",
+                                "query": "postgresql",
+                                "x": 80,
+                                "y": 60,
+                                "w": 180,
+                                "h": 135,
+                                "external_label": "OCI PostgreSQL",
+                            },
+                            {
+                                "id": "vision",
+                                "query": "OCI Vision",
+                                "x": 320,
+                                "y": 70,
+                                "w": 150,
+                                "h": 110,
+                                "external_label": "OCI Vision",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+
+        pg_row = next(row for row in report if row.get("element_id") == "pg")
+        vision_row = next(row for row in report if row.get("element_id") == "vision")
+
+        self.assertGreater(float(pg_row["h"]), 70.0)
+        self.assertGreater(float(vision_row["h"]), 50.0)
+        self.assertLess(float(pg_row["w"]) / float(pg_row["h"]), 2.5)
+        self.assertLess(float(vision_row["w"]) / float(vision_row["h"]), 2.5)
+
+    def test_fastconnect_special_connector_keeps_visible_icon_geometry(self) -> None:
+        output_path, report, validation = self.render_temp_spec(
+            "fastconnect-special-connector",
+            {
+                "title": "FastConnect Special Connector",
+                "pages": [
+                    {
+                        "name": "Physical - FastConnect Special Connector",
+                        "page_type": "physical",
+                        "width": 360,
+                        "height": 220,
+                        "elements": [
+                            {
+                                "id": "fastconnect",
+                                "query": "fastconnect",
+                                "x": 110,
+                                "y": 70,
+                                "w": 110,
+                                "h": 42,
+                                "external_label": "FastConnect",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        fastconnect_row = next(row for row in report if row.get("element_id") == "fastconnect")
+        self.assertEqual(fastconnect_row["role"], "special-connector")
+        self.assertGreater(float(fastconnect_row["native_h"]), 20.0)
+
+        _, page_model = read_drawio_page_models(output_path)[0]
+        image_cells = [
+            cell
+            for cell in page_model.iterfind(".//mxCell")
+            if cell.attrib.get("parent") == fastconnect_row["cell_id"] and "shape=image" in cell.attrib.get("style", "")
+        ]
+        self.assertTrue(image_cells)
+        image_geometry = image_cells[0].find("mxGeometry")
+        assert image_geometry is not None
+        self.assertGreater(float(image_geometry.attrib["height"]), 20.0)
+        self.assertGreater(float(image_geometry.attrib["width"]), 25.0)
+
+    def test_data_flow_renders_from_toolkit_supplement(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "data-flow-toolkit-supplement",
+            {
+                "title": "Data Flow Toolkit Supplement",
+                "pages": [
+                    {
+                        "name": "Physical - Data Flow Toolkit Supplement",
+                        "page_type": "physical",
+                        "width": 420,
+                        "height": 240,
+                        "elements": [
+                            {
+                                "id": "data-flow",
+                                "query": "data flow",
+                                "x": 130,
+                                "y": 60,
+                                "h": 92,
+                                "hide_internal_label": True,
+                                "external_label": "Data Flow",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        data_flow_row = next(row for row in report if row.get("element_id") == "data-flow")
+        self.assertEqual(data_flow_row["icon_title"], "Analytics and AI - Data Flow")
+        self.assertIn(data_flow_row["source"], {"oci-library.xml", "toolkit-v24.2-icons-page"})
+
+    def test_quality_review_flags_placeholder_when_direct_icon_exists(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "placeholder-direct-icon-conflict",
+            {
+                "title": "Placeholder Direct Icon Conflict",
+                "pages": [
+                    {
+                        "name": "Physical - Placeholder Direct Icon Conflict",
+                        "page_type": "physical",
+                        "width": 420,
+                        "height": 220,
+                        "elements": [
+                            {
+                                "id": "data-flow-placeholder",
+                                "type": "shape",
+                                "shape": "rounded-rectangle",
+                                "x": 110,
+                                "y": 60,
+                                "w": 180,
+                                "h": 78,
+                                "label": "PLACEHOLDER:\nOCI Data Flow",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        self.assertIn(
+            "placeholder-despite-direct-icon",
+            {issue["code"] for issue in quality["issues"]},
+        )
+
+    def test_quality_review_flags_unparented_oci_service_outside_region(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "oci-icon-outside-region",
+            {
+                "title": "OCI Icon Outside Region",
+                "pages": [
+                    {
+                        "name": "Physical - OCI Icon Outside Region",
+                        "page_type": "physical",
+                        "width": 520,
+                        "height": 260,
+                        "elements": [
+                            {"id": "api", "query": "API Gateway", "x": 40, "y": 90, "w": 90, "h": 90},
+                            {"id": "region", "query": "region", "x": 180, "y": 30, "w": 300, "h": 200},
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        self.assertIn("oci-icon-outside-region", {issue["code"] for issue in quality["issues"]})
+
+    def test_quality_review_flags_edges_running_on_container_borders(self) -> None:
+        _, report, validation = self.render_temp_spec(
+            "edge-on-container-border",
+            {
+                "title": "Edge On Container Border",
+                "pages": [
+                    {
+                        "name": "Physical - Edge On Container Border",
+                        "page_type": "physical",
+                        "width": 460,
+                        "height": 220,
+                        "elements": [
+                            {"id": "source", "query": "DNS", "x": 10, "y": 25, "w": 70, "h": 70},
+                            {
+                                "id": "subnet",
+                                "query": "subnet",
+                                "x": 90,
+                                "y": 60,
+                                "w": 260,
+                                "h": 120,
+                                "value": "<b>Public Subnet</b><br/><font color=\"#312d2a\">10.0.1.0/24</font>",
+                            },
+                            {"id": "target", "query": "load balancer", "x": 360, "y": 25, "w": 70, "h": 70},
+                            {
+                                "type": "edge",
+                                "id": "border-route",
+                                "source": "source",
+                                "target": "target",
+                                "source_anchor": "right",
+                                "target_anchor": "left",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertFalse(validation["issues"])
+        quality = review_render_report(report)
+        self.assertIn("edge-on-container-border", {issue["code"] for issue in quality["issues"]})
+
     def test_missing_clarification_gate_is_rejected(self) -> None:
         temp_dir = Path(tempfile.mkdtemp(prefix="oci-drawio-test-"))
         spec_path = temp_dir / "missing-clarification-gate.json"
@@ -315,7 +537,15 @@ class RenderDrawioTests(unittest.TestCase):
                         "width": 420,
                         "height": 220,
                         "elements": [
-                            {"id": "dns", "query": "DNS", "x": 40, "y": 60, "w": 150, "h": 50},
+                            {
+                                "id": "dns",
+                                "query": "DNS",
+                                "x": 40,
+                                "y": 60,
+                                "w": 150,
+                                "h": 50,
+                                "allow_aspect_distortion": True,
+                            },
                             {"id": "waf", "query": "WAF", "x": 240, "y": 60, "w": 90, "h": 90},
                         ],
                     }
@@ -357,6 +587,8 @@ class RenderDrawioTests(unittest.TestCase):
         )
 
         self.assertFalse(validation["issues"])
+        edge_row = next(row for row in report if row.get("kind") == "edge")
+        edge_row["waypoints"] = [{"x": 200.0, "y": 160.0}]
         quality = review_render_report(report)
         codes = {issue["code"] for issue in quality["issues"]}
         self.assertIn("edge-diagonal-segment", codes)

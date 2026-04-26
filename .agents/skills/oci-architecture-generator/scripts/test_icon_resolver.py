@@ -24,6 +24,11 @@ class ResolveIconTests(unittest.TestCase):
         self.assertEqual(result["resolution"], "alias")
         self.assertEqual(result["icon_title"], "Database - OCI Database with PostgreSQL")
 
+    def test_oci_data_flow_alias(self) -> None:
+        result = resolve_icon("OCI Data Flow", page="physical")
+        self.assertEqual(result["resolution"], "alias")
+        self.assertEqual(result["icon_title"], "Analytics and AI - Data Flow")
+
     def test_redis_falls_back_to_placeholder_cylinder(self) -> None:
         result = resolve_icon("redis", page="physical")
         self.assertEqual(result["resolution"], "placeholder")

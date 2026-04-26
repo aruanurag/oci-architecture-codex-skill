@@ -38,6 +38,12 @@ FOCUS_TAG_WEIGHTS = {
     "oke": 28,
     "three-tier": 24,
     "ha": 20,
+    "cross-cloud": 20,
+    "genai": 18,
+    "gitops": 18,
+    "argocd": 18,
+    "dicom": 18,
+    "weblogic": 18,
     "dual-ad": 18,
     "blank": 16,
     "canvas": 16,
@@ -46,6 +52,9 @@ FOCUS_TAG_WEIGHTS = {
     "compute": 14,
     "database": 14,
     "kubernetes": 14,
+    "postgresql": 12,
+    "opensearch": 12,
+    "redis": 10,
     "internet": 10,
     "on-premises": 10,
 }
@@ -58,6 +67,73 @@ PAGE_TYPE_WEIGHTS = {
 ORIENTATION_WEIGHTS = {
     "landscape": 4,
     "portrait": 6,
+}
+
+REFERENCE_HINTS = {
+    29: {
+        "keywords": {
+            "admin",
+            "backup",
+            "bastion",
+            "data",
+            "database",
+            "exadata",
+            "guard",
+            "primary",
+            "replica",
+            "shared",
+            "standby",
+            "storage",
+            "vault",
+        },
+        "traits": {"database-heavy", "ha"},
+    },
+    31: {
+        "add_tags": {"cross-cloud"},
+        "keywords": {
+            "azure",
+            "cross-cloud",
+            "drg",
+            "fastconnect",
+            "hospital",
+            "hybrid",
+            "medical",
+            "multicloud",
+            "third-party",
+            "transit",
+            "vnet",
+        },
+        "traits": {"hybrid", "mixed-boundary"},
+    },
+    32: {
+        "add_tags": {"argocd", "dicom", "genai", "gitops", "postgresql", "redis", "opensearch", "weblogic"},
+        "keywords": {
+            "api",
+            "argocd",
+            "cache",
+            "dicom",
+            "gitops",
+            "gpu",
+            "jenkins",
+            "llm",
+            "marketplace",
+            "object",
+            "oke",
+            "opensearch",
+            "orthanc",
+            "pacs",
+            "postgresql",
+            "rag",
+            "redis",
+            "registry",
+            "search",
+            "valkey",
+            "vector",
+            "weblogic",
+            "wls",
+        },
+        "traits": {"application-platform", "modern-app"},
+    },
 }
 
 
@@ -83,6 +159,17 @@ def load_reference_catalog(catalog_path: Path | None = None) -> list[dict[str, A
     return build_catalog(pptx_path)
 
 
+def enrich_reference(reference: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
+    hint = REFERENCE_HINTS.get(reference.get("slide_number"), {})
+    reference_tags = set(reference.get("tags", []))
+    reference_tags |= {normalize(tag).replace(" ", "-") for tag in hint.get("add_tags", set()) if normalize(tag)}
+    reference_tokens = set(reference.get("tokens", []))
+    reference_tokens |= significant_tokens(" ".join(hint.get("keywords", [])))
+    reference_traits = set(reference.get("traits", []))
+    reference_traits |= {normalize(trait).replace(" ", "-") for trait in hint.get("traits", set()) if normalize(trait)}
+    return reference_tags, reference_tokens, reference_traits
+
+
 def build_query_profile(query: str) -> QueryProfile:
     normalized = normalize(query)
     tokens = significant_tokens(query)
@@ -93,6 +180,21 @@ def build_query_profile(query: str) -> QueryProfile:
         tokens.add("oke")
     if "oke" in tokens:
         tags.update({"kubernetes", "oke"})
+    if {"argo", "cd"} <= tokens or "argocd" in tokens or "gitops" in tokens:
+        tokens.update({"argocd", "gitops", "oke"})
+        tags.update({"argocd", "gitops", "kubernetes", "oke"})
+    if "weblogic" in tokens or "wls" in tokens:
+        tokens.update({"weblogic", "wls", "oke"})
+        tags.update({"weblogic", "kubernetes", "oke"})
+    if "marketplace" in tokens:
+        tokens.add("oke")
+        tags.update({"kubernetes", "oke"})
+    if {"dicom", "orthanc", "pacs", "vna"} & tokens or "dicomweb" in tokens:
+        tokens.update({"dicom", "medical", "imaging", "oke"})
+        tags.update({"dicom", "kubernetes", "mixed-boundary", "oke"})
+    if "genai" in tokens or "llm" in tokens or "rag" in tokens or ("generative" in tokens and "ai" in tokens):
+        tokens.update({"genai", "llm", "oke"})
+        tags.update({"genai", "kubernetes", "oke"})
     if {"three", "tier"} <= tokens or "3" in tokens and "tier" in tokens:
         tags.add("three-tier")
     if "multi" in tokens and "tier" in tokens:
@@ -105,6 +207,11 @@ def build_query_profile(query: str) -> QueryProfile:
         tags.add("on-premises")
     if "on-premises" in normalized:
         tags.add("on-premises")
+    if "fastconnect" in tokens or "drg" in tokens:
+        tags.add("mixed-boundary")
+    if "azure" in tokens or "aks" in tokens or "multicloud" in tokens:
+        tokens.update({"azure", "cross-cloud"})
+        tags.update({"cross-cloud", "mixed-boundary"})
     if "blank" in tokens or "baseline" in tokens:
         tags.update({"blank", "canvas"})
     if "subnet" in tokens or "vcn" in tokens or "gateway" in tokens:
@@ -113,6 +220,16 @@ def build_query_profile(query: str) -> QueryProfile:
         tags.add("compute")
     if "database" in tokens or "adb" in tokens or "postgres" in tokens or "mysql" in tokens:
         tags.add("database")
+    if "postgres" in tokens or "postgresql" in tokens:
+        tokens.update({"postgres", "postgresql"})
+        tags.update({"database", "postgresql"})
+    if "redis" in tokens or "valkey" in tokens:
+        tokens.update({"redis", "valkey"})
+        tags.update({"database", "redis"})
+    if "opensearch" in tokens:
+        tags.update({"database", "opensearch"})
+    if {"postgres", "redis", "opensearch"} <= tokens or {"postgresql", "redis", "opensearch"} <= tokens:
+        tags.update({"three-tier", "kubernetes", "oke"})
 
     page_type = "logical" if "logical" in tokens else "physical"
     orientation = None
@@ -134,9 +251,7 @@ def build_query_profile(query: str) -> QueryProfile:
 def score_reference(reference: dict[str, Any], query: str | QueryProfile) -> dict[str, Any]:
     profile = query if isinstance(query, QueryProfile) else build_query_profile(query)
 
-    reference_tags = set(reference.get("tags", []))
-    reference_tokens = set(reference.get("tokens", []))
-    reference_traits = set(reference.get("traits", []))
+    reference_tags, reference_tokens, reference_traits = enrich_reference(reference)
 
     matched_tags = sorted(profile.tags & reference_tags)
     matched_tokens = sorted(profile.tokens & reference_tokens)
@@ -159,6 +274,10 @@ def score_reference(reference: dict[str, Any], query: str | QueryProfile) -> dic
         trait_score += 8
     if "ha" in profile.tags and "ha" in reference_traits:
         trait_score += 10
+    if "cross-cloud" in profile.tags and {"hybrid", "mixed-boundary"} & reference_traits:
+        trait_score += 12
+    if {"genai", "argocd", "gitops", "weblogic", "dicom"} & profile.tags and "application-platform" in reference_traits:
+        trait_score += 6
     if "canvas" in reference_traits and not matched_tags:
         trait_score += 2
 

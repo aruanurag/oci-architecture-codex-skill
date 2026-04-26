@@ -6,6 +6,8 @@ These Oracle-provided `.drawio` files were imported from the user-supplied zip a
 
 Use them as the first visual baseline before inventing a layout from scratch. For mixed requests, prefer one primary reference and optionally one or two supporting references that cover DR, security, or workload-specific nuances.
 
+When the user provides a specific Oracle solution link, pair this file with `references/oracle-solution-patterns.md` so the skill can extract the architecture intent first and then choose the closest bundled baseline.
+
 You can inspect matches with:
 
 ```bash

@@ -2,6 +2,8 @@
 
 These Oracle PowerPoint slides are the preferred layout baselines when the skill can reuse a close starting point instead of arranging a slide from scratch.
 
+When the user provides a specific Oracle solution link, pair this catalog with `references/oracle-solution-patterns.md` so the skill can extract the architecture intent first and then choose the closest baseline slide plus any supporting slides.
+
 Total references: 8
 
 ## Slide 24 - Logical Landscape Blank Canvas

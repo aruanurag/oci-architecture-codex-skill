@@ -356,6 +356,140 @@ def set_element_frame(element: ET.Element, x: int, y: int, w: int, h: int) -> No
     ext.attrib["cy"] = str(int(max(h, 1)))
 
 
+def element_frame(element: ET.Element) -> tuple[int, int, int, int] | None:
+    if local_name(element) == "grpSp":
+        xfrm = element.find("./p:grpSpPr/a:xfrm", NS)
+    else:
+        xfrm = element.find("./p:spPr/a:xfrm", NS)
+    if xfrm is None:
+        return None
+    off = xfrm.find("./a:off", NS)
+    ext = xfrm.find("./a:ext", NS)
+    if off is None or ext is None:
+        return None
+    return (
+        int(off.attrib.get("x", "0")),
+        int(off.attrib.get("y", "0")),
+        int(ext.attrib.get("cx", "0")),
+        int(ext.attrib.get("cy", "0")),
+    )
+
+
+def has_non_empty_text(element: ET.Element) -> bool:
+    return any((node.text or "").strip() for node in element.findall(".//a:t", NS))
+
+
+def group_visual_children(group: ET.Element) -> list[ET.Element]:
+    return [
+        child
+        for child in list(group)
+        if local_name(child) not in {"nvGrpSpPr", "grpSpPr"}
+    ]
+
+
+def union_element_frames(elements: list[ET.Element]) -> tuple[int, int, int, int] | None:
+    frames = [frame for frame in (element_frame(element) for element in elements) if frame is not None]
+    if not frames:
+        return None
+    min_x = min(frame[0] for frame in frames)
+    min_y = min(frame[1] for frame in frames)
+    max_x = max(frame[0] + frame[2] for frame in frames)
+    max_y = max(frame[1] + frame[3] for frame in frames)
+    return (min_x, min_y, max(max_x - min_x, 1), max(max_y - min_y, 1))
+
+
+def crop_group_to_visual_children(group: ET.Element) -> bool:
+    if local_name(group) != "grpSp":
+        return False
+
+    drawable_children = group_visual_children(group)
+    text_children = [child for child in drawable_children if has_non_empty_text(child)]
+    visual_children = [child for child in drawable_children if child not in text_children]
+    if not text_children or not visual_children:
+        return False
+
+    for child in text_children:
+        group.remove(child)
+
+    bbox = union_element_frames(visual_children)
+    if bbox is None:
+        return False
+
+    xfrm = group.find("./p:grpSpPr/a:xfrm", NS)
+    if xfrm is None:
+        return False
+    off = xfrm.find("./a:off", NS)
+    ext = xfrm.find("./a:ext", NS)
+    ch_off = xfrm.find("./a:chOff", NS)
+    ch_ext = xfrm.find("./a:chExt", NS)
+    if off is None or ext is None or ch_off is None or ch_ext is None:
+        return False
+
+    x, y, w, h = bbox
+    off.attrib["x"] = str(x)
+    off.attrib["y"] = str(y)
+    ext.attrib["cx"] = str(w)
+    ext.attrib["cy"] = str(h)
+    ch_off.attrib["x"] = str(x)
+    ch_off.attrib["y"] = str(y)
+    ch_ext.attrib["cx"] = str(w)
+    ch_ext.attrib["cy"] = str(h)
+    return True
+
+
+def shift_element_coordinates(element: ET.Element, delta_x: int, delta_y: int) -> None:
+    if local_name(element) == "grpSp":
+        xfrm = element.find("./p:grpSpPr/a:xfrm", NS)
+    else:
+        xfrm = element.find("./p:spPr/a:xfrm", NS)
+    if xfrm is None:
+        return
+
+    off = xfrm.find("./a:off", NS)
+    if off is not None:
+        off.attrib["x"] = str(int(off.attrib.get("x", "0")) + delta_x)
+        off.attrib["y"] = str(int(off.attrib.get("y", "0")) + delta_y)
+
+    ch_off = xfrm.find("./a:chOff", NS)
+    if ch_off is not None:
+        ch_off.attrib["x"] = str(int(ch_off.attrib.get("x", "0")) + delta_x)
+        ch_off.attrib["y"] = str(int(ch_off.attrib.get("y", "0")) + delta_y)
+
+
+def normalize_group_coordinate_space(group: ET.Element) -> bool:
+    if local_name(group) != "grpSp":
+        return False
+
+    xfrm = group.find("./p:grpSpPr/a:xfrm", NS)
+    if xfrm is None:
+        return False
+    ch_off = xfrm.find("./a:chOff", NS)
+    ch_ext = xfrm.find("./a:chExt", NS)
+    if ch_off is None or ch_ext is None:
+        return False
+
+    shift_x = -int(ch_off.attrib.get("x", "0"))
+    shift_y = -int(ch_off.attrib.get("y", "0"))
+
+    normalized = False
+    if shift_x != 0 or shift_y != 0:
+        for child in group_visual_children(group):
+            shift_element_coordinates(child, shift_x, shift_y)
+            for descendant in child.iter():
+                if descendant is child:
+                    continue
+                shift_element_coordinates(descendant, shift_x, shift_y)
+        ch_off.attrib["x"] = "0"
+        ch_off.attrib["y"] = "0"
+        normalized = True
+
+    for child in group_visual_children(group):
+        if local_name(child) == "grpSp":
+            normalized = normalize_group_coordinate_space(child) or normalized
+
+    return normalized
+
+
 def slide_sp_tree(slide_root: ET.Element) -> ET.Element:
     sp_tree = slide_root.find(f".//{{{P_NS}}}spTree")
     if sp_tree is None:
@@ -376,17 +510,30 @@ class AssetLibrary:
         self.catalog = catalog
         self.catalog_by_title = {entry["title"]: entry for entry in catalog}
         self.slide_roots: dict[int, ET.Element] = {}
+        self.slide_relationships: dict[int, dict[str, ET.Element]] = {}
         with zipfile.ZipFile(pptx_path) as archive:
             for slide_number in {entry["slide_number"] for entry in catalog}:
                 self.slide_roots[slide_number] = ET.fromstring(
                     archive.read(f"ppt/slides/slide{slide_number}.xml")
                 )
+                rel_name = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+                slide_rels: dict[str, ET.Element] = {}
+                if rel_name in archive.namelist():
+                    rel_root = ET.fromstring(archive.read(rel_name))
+                    for rel in rel_root:
+                        rel_id = rel.attrib.get("Id")
+                        if rel_id:
+                            slide_rels[rel_id] = rel
+                self.slide_relationships[slide_number] = slide_rels
 
     def clone(self, title: str) -> ET.Element:
+        return self.clone_with_relationships(title)[0]
+
+    def clone_with_relationships(self, title: str) -> tuple[ET.Element, dict[str, ET.Element]]:
         entry = self.catalog_by_title[title]
         sp_tree = slide_sp_tree(self.slide_roots[entry["slide_number"]])
         original = resolve_catalog_path(sp_tree, entry["element_path"])
-        return copy.deepcopy(original)
+        return copy.deepcopy(original), self.slide_relationships.get(entry["slide_number"], {})
 
 
 class IdAllocator:
@@ -692,6 +839,165 @@ def should_apply_page_margins(
     return width >= 140.0 or height >= 100.0
 
 
+def estimate_label_width(text: str, icon_width: float) -> float:
+    lines = text.splitlines() or [text]
+    longest = max((len(line.strip()) for line in lines), default=0)
+    return max(72.0, min(max(icon_width * 1.35, 0.0), max(96.0, (longest * 7.0) + 18.0)))
+
+
+def estimate_label_height(text: str, font_size_pt: int) -> float:
+    line_count = max(len(text.splitlines()), 1)
+    return max(20.0, (line_count * (font_size_pt + 3)) + 6.0)
+
+
+def clamp_within_bounds(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    bounds: dict[str, float],
+    *,
+    padding: float = 0.0,
+) -> tuple[float, float]:
+    min_x = bounds["x"] + padding
+    min_y = bounds["y"] + padding
+    max_x = bounds["x"] + bounds["w"] - padding - width
+    max_y = bounds["y"] + bounds["h"] - padding - height
+
+    if max_x >= min_x:
+        x = min(max(x, min_x), max_x)
+    if max_y >= min_y:
+        y = min(max(y, min_y), max_y)
+    return x, y
+
+
+def overflow_distance(frame: dict[str, float], bounds: dict[str, float]) -> float:
+    left = max(bounds["x"] - frame["x"], 0.0)
+    top = max(bounds["y"] - frame["y"], 0.0)
+    right = max((frame["x"] + frame["w"]) - (bounds["x"] + bounds["w"]), 0.0)
+    bottom = max((frame["y"] + frame["h"]) - (bounds["y"] + bounds["h"]), 0.0)
+    return left + top + right + bottom
+
+
+def external_label_frame_for_side(
+    icon_bbox: dict[str, float],
+    *,
+    side: str,
+    width: float,
+    height: float,
+    offset: float,
+) -> dict[str, float]:
+    if side == "top":
+        return {
+            "x": icon_bbox["x"] + ((icon_bbox["w"] - width) / 2),
+            "y": icon_bbox["y"] - offset - height,
+            "w": width,
+            "h": height,
+        }
+    if side == "left":
+        return {
+            "x": icon_bbox["x"] - offset - width,
+            "y": icon_bbox["y"] + ((icon_bbox["h"] - height) / 2),
+            "w": width,
+            "h": height,
+        }
+    if side == "right":
+        return {
+            "x": icon_bbox["x"] + icon_bbox["w"] + offset,
+            "y": icon_bbox["y"] + ((icon_bbox["h"] - height) / 2),
+            "w": width,
+            "h": height,
+        }
+    return {
+        "x": icon_bbox["x"] + ((icon_bbox["w"] - width) / 2),
+        "y": icon_bbox["y"] + icon_bbox["h"] + offset,
+        "w": width,
+        "h": height,
+    }
+
+
+def choose_external_label_frame(
+    item: dict[str, Any],
+    icon_bbox: dict[str, float],
+    *,
+    text: str,
+    parent_bbox: dict[str, float] | None,
+    page_width: float,
+    page_height: float,
+    avoid_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+) -> dict[str, float]:
+    font_size = int(item.get("external_label_font_size", 10))
+    width = float(item.get("external_label_width", estimate_label_width(text, icon_bbox["w"])))
+    height = float(item.get("external_label_height", estimate_label_height(text, font_size)))
+    offset = float(item.get("external_label_offset", 6))
+    preferred_side = str(item.get("external_label_side", "")).strip().lower()
+
+    side_order = ["bottom", "top", "right", "left"]
+    boundary_side = str(item.get("boundary_side", "")).strip().lower()
+    if boundary_side == "right":
+        side_order = ["bottom", "top", "left", "right"]
+    elif boundary_side == "left":
+        side_order = ["bottom", "top", "right", "left"]
+    if preferred_side:
+        side_order = [preferred_side] + [side for side in side_order if side != preferred_side]
+
+    page_bounds = {"x": 0.0, "y": 0.0, "w": page_width, "h": page_height}
+    best_frame = external_label_frame_for_side(icon_bbox, side=side_order[0], width=width, height=height, offset=offset)
+    best_score = float("-inf")
+
+    for side in side_order:
+        frame = external_label_frame_for_side(icon_bbox, side=side, width=width, height=height, offset=offset)
+        page_overflow = overflow_distance(frame, page_bounds)
+        parent_overflow = overflow_distance(frame, parent_bbox) if parent_bbox is not None else 0.0
+        icon_overlap = bboxes_overlap(frame, icon_bbox, tolerance=0.5)
+        connector_overlap = bool(avoid_segments) and frame_overlaps_segments(frame, avoid_segments)
+        score = 0.0
+        if page_overflow == 0.0:
+            score += 2.0
+        if parent_bbox is None or parent_overflow == 0.0:
+            score += 3.0
+        if side == preferred_side and preferred_side:
+            score += 0.35
+        if icon_overlap:
+            score -= 6.0
+        if connector_overlap:
+            score -= 7.0
+        score -= (page_overflow + parent_overflow) / 100.0
+        if score > best_score:
+            best_score = score
+            best_frame = frame
+
+    x, y = clamp_within_page_margins(
+        best_frame["x"],
+        best_frame["y"],
+        best_frame["w"],
+        best_frame["h"],
+        page_width=page_width,
+        page_height=page_height,
+    )
+    if parent_bbox is not None:
+        x, y = clamp_within_bounds(x, y, best_frame["w"], best_frame["h"], parent_bbox, padding=2.0)
+    return {"x": x, "y": y, "w": best_frame["w"], "h": best_frame["h"]}
+
+
+def frame_overlaps_segments(
+    frame: dict[str, float],
+    segments: list[tuple[tuple[float, float], tuple[float, float]]],
+    *,
+    padding: float = 2.0,
+) -> bool:
+    padded_frame = {
+        "x": frame["x"] - padding,
+        "y": frame["y"] - padding,
+        "w": frame["w"] + (padding * 2),
+        "h": frame["h"] + (padding * 2),
+    }
+    for start, end in segments:
+        if segment_intersects_bbox(start, end, padded_frame):
+            return True
+    return False
+
+
 def polyline_bbox(points_emu: list[tuple[int, int]]) -> tuple[int, int, int, int]:
     xs = [point[0] for point in points_emu]
     ys = [point[1] for point in points_emu]
@@ -907,22 +1213,28 @@ def fit_dimensions(
     raw: dict[str, Any],
     resolution: dict[str, Any] | None,
     catalog_entry: dict[str, Any] | None,
+    native_bbox_emu: dict[str, int] | None = None,
 ) -> tuple[float, float]:
     width = raw.get("w")
     height = raw.get("h")
     if width is not None and height is not None:
         return float(width), float(height)
 
-    if catalog_entry:
+    if native_bbox_emu is not None:
+        bbox = native_bbox_emu
+        aspect = bbox["w"] / max(bbox["h"], 1)
+    elif catalog_entry:
         bbox = catalog_entry["bbox_emu"]
         aspect = bbox["w"] / max(bbox["h"], 1)
     else:
+        bbox = None
         aspect = 1.0
 
     if width is None and height is None:
         if catalog_entry and catalog_entry["category"].startswith("Physical - Grouping"):
-            return float(max(catalog_entry["bbox_emu"]["w"] // 6000, 100)), float(
-                max(catalog_entry["bbox_emu"]["h"] // 6000, 70)
+            assert bbox is not None
+            return float(max(bbox["w"] // 6000, 100)), float(
+                max(bbox["h"] // 6000, 70)
             )
         width = DEFAULT_ICON_BOX
         height = DEFAULT_ICON_BOX / max(aspect, 0.1)
@@ -933,7 +1245,7 @@ def fit_dimensions(
     return float(width), float(width / max(aspect, 0.1))
 
 
-def build_slide_relationships() -> bytes:
+def build_slide_relationships(extra_relationships: list[ET.Element] | None = None) -> bytes:
     root = ET.Element(qn(REL_NS, "Relationships"))
     ET.SubElement(
         root,
@@ -944,7 +1256,39 @@ def build_slide_relationships() -> bytes:
             "Target": "../slideLayouts/slideLayout17.xml",
         },
     )
+    for rel in extra_relationships or []:
+        root.append(copy.deepcopy(rel))
     return serialize_xml(root)
+
+
+def remap_element_relationships(
+    element: ET.Element,
+    source_relationships: dict[str, ET.Element],
+    *,
+    next_rel_id: int,
+) -> tuple[list[ET.Element], int]:
+    rel_map: dict[str, str] = {}
+    remapped_relationships: list[ET.Element] = []
+    supported_relation_keys = {"id", "embed", "link"}
+
+    for node in element.iter():
+        for attr_name, attr_value in list(node.attrib.items()):
+            if not attr_name.startswith(f"{{{R_NS}}}"):
+                continue
+            if attr_name.rsplit("}", 1)[-1] not in supported_relation_keys:
+                continue
+            source_rel = source_relationships.get(attr_value)
+            if source_rel is None:
+                continue
+            if attr_value not in rel_map:
+                rel_map[attr_value] = f"rId{next_rel_id}"
+                next_rel_id += 1
+                rel_clone = copy.deepcopy(source_rel)
+                rel_clone.attrib["Id"] = rel_map[attr_value]
+                remapped_relationships.append(rel_clone)
+            node.attrib[attr_name] = rel_map[attr_value]
+
+    return remapped_relationships, next_rel_id
 
 
 def update_presentation_xml(contents: dict[str, bytes], slide_count: int) -> bytes:
@@ -1236,6 +1580,33 @@ def route_context(
         or str(item.get("category", "")).startswith("Physical - Location")
     ]
     return placed_by_id, visible_boxes, container_boxes
+
+
+def external_label_bounds_parent(
+    parent_id: str | None,
+    element_index: dict[str, dict[str, Any]],
+) -> str | None:
+    if not parent_id:
+        return None
+    parent = element_index.get(parent_id)
+    if parent is None:
+        return None
+    if parent.get("kind") == "shape" and parent.get("parent"):
+        return str(parent["parent"])
+    return parent_id
+
+
+def external_label_bounds_bbox(
+    parent_id: str | None,
+    element_index: dict[str, dict[str, Any]],
+) -> dict[str, float] | None:
+    bounds_parent_id = external_label_bounds_parent(parent_id, element_index)
+    if not bounds_parent_id:
+        return None
+    bounds_parent = element_index.get(bounds_parent_id)
+    if bounds_parent is None:
+        return None
+    return bounds_parent["bbox"]
 
 
 def evaluate_connector_route(
@@ -1611,7 +1982,7 @@ def render_slide(
     *,
     asset_library: AssetLibrary,
     catalog_by_title: dict[str, dict[str, Any]],
-) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
+) -> tuple[bytes, bytes, dict[str, Any], dict[str, Any]]:
     slide_root = make_slide_root()
     sp_tree = slide_sp_tree(slide_root)
     allocator = IdAllocator()
@@ -1624,6 +1995,9 @@ def render_slide(
     placed_elements: list[dict[str, Any]] = []
     element_index: dict[str, dict[str, Any]] = {}
     renderables: list[tuple[dict[str, Any], ET.Element | None]] = []
+    external_label_renderables: list[dict[str, Any]] = []
+    slide_extra_relationships: list[ET.Element] = []
+    next_slide_rel_id = 2
 
     for raw in page.get("elements", []):
         item = dict(raw)
@@ -1637,6 +2011,10 @@ def render_slide(
         kind = item.get("type", "library")
         visible = True
         render_element: ET.Element | None = None
+        render_element_relationships: dict[str, ET.Element] | None = None
+        native_bbox_emu = None
+        separate_external_label_text: str | None = None
+        internal_label_hidden = False
 
         if item.get("query") or item.get("icon_title"):
             query = item.get("icon_title") or item.get("query")
@@ -1646,8 +2024,34 @@ def render_slide(
                 item["shape"] = item.get("shape") or resolution["placeholder_shape"]
             else:
                 catalog_entry = catalog_by_title[resolution["icon_title"]]
+                external_label_text = drawio_html_to_text(item["external_label"]) if item.get("external_label") else None
+                external_label_side = str(item.get("external_label_side", "")).strip().lower()
+                separate_external_label_requested = bool(external_label_text) and (
+                    bool(item.get("hide_internal_label"))
+                    or bool(item.get("force_external_label"))
+                    or external_label_side in {"top", "bottom", "left", "right"}
+                )
+                if separate_external_label_requested:
+                    separate_external_label_text = external_label_text
+                internal_label_hidden = bool(item.get("hide_internal_label")) or (
+                    bool(separate_external_label_text) and not bool(item.get("preserve_internal_label"))
+                )
+                if internal_label_hidden:
+                    render_element, render_element_relationships = asset_library.clone_with_relationships(
+                        catalog_entry["title"]
+                    )
+                    if crop_group_to_visual_children(render_element):
+                        cropped_frame = element_frame(render_element)
+                        if cropped_frame is not None:
+                            native_bbox_emu = {
+                                "x": cropped_frame[0],
+                                "y": cropped_frame[1],
+                                "w": cropped_frame[2],
+                                "h": cropped_frame[3],
+                            }
+                    normalize_group_coordinate_space(render_element)
 
-        width, height = fit_dimensions(item, resolution, catalog_entry)
+        width, height = fit_dimensions(item, resolution, catalog_entry, native_bbox_emu=native_bbox_emu)
         boundary_parent_id = item.get("boundary_parent")
         boundary_side = item.get("boundary_side")
         if boundary_parent_id:
@@ -1727,7 +2131,11 @@ def render_slide(
                     style=style,
                 )
         elif catalog_entry:
-            render_element = asset_library.clone(catalog_entry["title"])
+            if render_element is None:
+                render_element, render_element_relationships = asset_library.clone_with_relationships(
+                    catalog_entry["title"]
+                )
+                normalize_group_coordinate_space(render_element)
             set_element_frame(
                 render_element,
                 to_emu(abs_x, scale_x),
@@ -1740,13 +2148,19 @@ def render_slide(
                 label_override = drawio_html_to_text(item["value"])
             elif item.get("label"):
                 label_override = drawio_html_to_text(item["label"])
-            elif item.get("external_label"):
+            elif item.get("external_label") and not separate_external_label_text:
                 label_override = drawio_html_to_text(item["external_label"])
-            override_element_text(
-                render_element,
-                label_override,
-                hide=bool(item.get("hide_internal_label")) and not label_override,
-            )
+            if label_override is not None:
+                override_element_text(render_element, label_override)
+            elif internal_label_hidden and not native_bbox_emu:
+                override_element_text(render_element, None, hide=True)
+            if render_element_relationships:
+                extra_relationships, next_slide_rel_id = remap_element_relationships(
+                    render_element,
+                    render_element_relationships,
+                    next_rel_id=next_slide_rel_id,
+                )
+                slide_extra_relationships.extend(extra_relationships)
             allocator.assign(render_element)
 
         record = {
@@ -1765,6 +2179,80 @@ def render_slide(
         if record["id"]:
             element_index[record["id"]] = record
         renderables.append((record, render_element))
+
+        if separate_external_label_text and visible:
+            label_parent_id = external_label_bounds_parent(parent_id, element_index)
+            label_parent_bbox = external_label_bounds_bbox(parent_id, element_index)
+            label_bbox = choose_external_label_frame(
+                item,
+                bbox,
+                text=separate_external_label_text,
+                parent_bbox=label_parent_bbox,
+                page_width=page_width,
+                page_height=page_height,
+            )
+            label_font_size = int(item.get("external_label_font_size", 10))
+            label_align = {"left": "l", "center": "ctr", "right": "r"}.get(
+                str(item.get("external_label_align", "center")).strip().lower(),
+                "ctr",
+            )
+            if bool(item.get("external_label_box", True)):
+                external_label_shape = create_placeholder_shape(
+                    allocator,
+                    shape_name=str(item.get("external_label_shape", "rounded-rectangle")),
+                    x=to_emu(label_bbox["x"], scale_x),
+                    y=to_emu(label_bbox["y"], scale_y),
+                    w=to_emu(label_bbox["w"], scale_x),
+                    h=to_emu(label_bbox["h"], scale_y),
+                    label=separate_external_label_text,
+                    style={
+                        "fillColor": str(item.get("external_label_fill", "#F5F4F2")),
+                        "strokeColor": str(item.get("external_label_stroke", "#9E9892")),
+                        "fontSize": str(label_font_size),
+                        "fontStyle": "1" if bool(item.get("external_label_bold", True)) else "0",
+                    },
+                )
+            else:
+                external_label_shape = create_textbox(
+                    allocator,
+                    x=to_emu(label_bbox["x"], scale_x),
+                    y=to_emu(label_bbox["y"], scale_y),
+                    w=to_emu(label_bbox["w"], scale_x),
+                    h=to_emu(label_bbox["h"], scale_y),
+                    text=separate_external_label_text,
+                    font_size_pt=label_font_size,
+                    bold=bool(item.get("external_label_bold", True)),
+                    align=label_align,
+                    wrap="none" if "\n" not in separate_external_label_text else None,
+                    zero_margins=True,
+                    auto_fit="\n" not in separate_external_label_text,
+                )
+            label_id = f"{record['id']}__external_label" if record.get("id") else None
+            label_record = {
+                "id": label_id,
+                "parent": label_parent_id,
+                "bbox": label_bbox,
+                "kind": "text",
+                "visible": True,
+                "qa_ignore": bool(item.get("qa_ignore")),
+                "resolution": None,
+                "category": None,
+                "boundary_parent": None,
+                "boundary_side": None,
+            }
+            placed_elements.append(label_record)
+            if label_id:
+                element_index[label_id] = label_record
+            external_label_renderables.append(
+                {
+                    "record": label_record,
+                    "element": external_label_shape,
+                    "item": item,
+                    "text": separate_external_label_text,
+                    "icon_bbox": bbox,
+                    "parent_bbox": label_parent_bbox,
+                }
+            )
 
     for record, render_element in renderables:
         if render_element is None or not record["visible"]:
@@ -1869,6 +2357,35 @@ def render_slide(
             }
         )
 
+    connector_segments = [
+        (start, end)
+        for edge in edge_reports
+        for start, end in zip(edge["points"], edge["points"][1:])
+    ]
+    for label_entry in external_label_renderables:
+        label_record = label_entry["record"]
+        label_element = label_entry["element"]
+        if label_record["visible"] and frame_overlaps_segments(label_record["bbox"], connector_segments):
+            adjusted_bbox = choose_external_label_frame(
+                label_entry["item"],
+                label_entry["icon_bbox"],
+                text=label_entry["text"],
+                parent_bbox=label_entry["parent_bbox"],
+                page_width=page_width,
+                page_height=page_height,
+                avoid_segments=connector_segments,
+            )
+            label_record["bbox"] = adjusted_bbox
+            set_element_frame(
+                label_element,
+                to_emu(adjusted_bbox["x"], scale_x),
+                to_emu(adjusted_bbox["y"], scale_y),
+                to_emu(adjusted_bbox["w"], scale_x),
+                to_emu(adjusted_bbox["h"], scale_y),
+            )
+        if label_record["visible"]:
+            sp_tree.append(label_element)
+
     for label_element in edge_label_elements:
         sp_tree.append(label_element)
 
@@ -1883,7 +2400,7 @@ def render_slide(
         "issue_count": len(issues),
         "issues": issues,
     }
-    return serialize_xml(slide_root), report, quality
+    return serialize_xml(slide_root), build_slide_relationships(slide_extra_relationships), report, quality
 
 
 def load_spec(path: Path) -> dict[str, Any]:
@@ -1914,13 +2431,13 @@ def render_presentation(
     slide_reports = []
     slide_qualities = []
     for index, page in enumerate(pages, start=1):
-        slide_xml, report, quality = render_slide(
+        slide_xml, slide_relationships, report, quality = render_slide(
             page,
             asset_library=asset_library,
             catalog_by_title=catalog_by_title,
         )
         contents[f"ppt/slides/slide{index}.xml"] = slide_xml
-        contents[f"ppt/slides/_rels/slide{index}.xml.rels"] = build_slide_relationships()
+        contents[f"ppt/slides/_rels/slide{index}.xml.rels"] = slide_relationships
         slide_reports.append(report)
         slide_qualities.append(quality)
 

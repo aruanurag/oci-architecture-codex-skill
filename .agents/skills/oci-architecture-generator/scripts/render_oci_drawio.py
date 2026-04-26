@@ -28,6 +28,8 @@ DEFAULT_ICON_MAX_DIMENSION = 90.0
 EDGE_SEGMENT_TOLERANCE = 0.1
 EDGE_LANE_OVERLAP_TOLERANCE = 4.0
 EDGE_LANE_OVERLAP_MIN_LENGTH = 24.0
+EDGE_BORDER_OVERLAP_TOLERANCE = 3.0
+EDGE_BORDER_OVERLAP_MIN_LENGTH = 24.0
 NODE_OVERLAP_PADDING = 4.0
 PARENT_BOUNDARY_TOLERANCE = 2.0
 PARENT_CENTER_TOLERANCE = 1.0
@@ -138,6 +140,10 @@ VCN_LIKE_TITLES = {
 HORIZONTAL_SPECIAL_CONNECTOR_TITLES = {
     "Physical - Special Connectors - FastConnect - Horizontal",
     "Physical - Special Connectors - Remote Peering - Horizontal",
+}
+
+UNPARENTED_LIBRARY_ICON_ALLOWLIST = {
+    "Networking - Customer Premises Equipment CPE",
 }
 
 
@@ -258,6 +264,18 @@ def scale_dimensions_to_max_dimension(width: float, height: float, max_dimension
     return width * scale, height * scale
 
 
+def fit_dimensions_within_box(
+    native_width: float,
+    native_height: float,
+    max_width: float,
+    max_height: float,
+) -> tuple[float, float]:
+    if native_width <= 0 or native_height <= 0:
+        return max_width, max_height
+    scale = min(max_width / native_width, max_height / native_height)
+    return native_width * scale, native_height * scale
+
+
 def append_style(style: str, additions: dict[str, str] | str | None = None) -> str:
     if not additions:
         return style
@@ -280,6 +298,77 @@ def is_anchor_shape_element(element: dict[str, Any], width: float, height: float
     if max(width, height) > 6.0:
         return False
     return all(fragment in style for fragment in ANCHOR_STYLE_HINTS)
+
+
+def same_point(
+    first: tuple[float, float],
+    second: tuple[float, float],
+    *,
+    tolerance: float = EDGE_SEGMENT_TOLERANCE,
+) -> bool:
+    return abs(first[0] - second[0]) <= tolerance and abs(first[1] - second[1]) <= tolerance
+
+
+def orthogonalize_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    if not points:
+        return []
+
+    orthogonal: list[tuple[float, float]] = [points[0]]
+    for current in points[1:]:
+        previous = orthogonal[-1]
+        if abs(previous[0] - current[0]) <= EDGE_SEGMENT_TOLERANCE or abs(previous[1] - current[1]) <= EDGE_SEGMENT_TOLERANCE:
+            orthogonal.append(current)
+            continue
+
+        if len(orthogonal) >= 2:
+            prior = orthogonal[-2]
+            if abs(prior[0] - previous[0]) <= EDGE_SEGMENT_TOLERANCE:
+                elbow = (previous[0], current[1])
+            elif abs(prior[1] - previous[1]) <= EDGE_SEGMENT_TOLERANCE:
+                elbow = (current[0], previous[1])
+            else:
+                elbow = (current[0], previous[1])
+        elif abs(current[0] - previous[0]) >= abs(current[1] - previous[1]):
+            elbow = (current[0], previous[1])
+        else:
+            elbow = (previous[0], current[1])
+
+        if not same_point(previous, elbow):
+            orthogonal.append(elbow)
+        if not same_point(orthogonal[-1], current):
+            orthogonal.append(current)
+
+    return orthogonal
+
+
+def simplify_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    simplified: list[tuple[float, float]] = []
+    for point in points:
+        if simplified and same_point(simplified[-1], point):
+            continue
+        simplified.append(point)
+
+    index = 1
+    while index < len(simplified) - 1:
+        previous = simplified[index - 1]
+        current = simplified[index]
+        following = simplified[index + 1]
+        same_x = abs(previous[0] - current[0]) <= EDGE_SEGMENT_TOLERANCE and abs(current[0] - following[0]) <= EDGE_SEGMENT_TOLERANCE
+        same_y = abs(previous[1] - current[1]) <= EDGE_SEGMENT_TOLERANCE and abs(current[1] - following[1]) <= EDGE_SEGMENT_TOLERANCE
+        if same_x or same_y:
+            simplified.pop(index)
+            continue
+        index += 1
+
+    return simplified
+
+
+def normalize_connector_points(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    waypoints: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    return simplify_points(orthogonalize_points([start, *waypoints, end]))
 
 
 def encode_diagram(xml_text: str) -> str:
@@ -407,8 +496,8 @@ def build_snippet(title: str, source: str, cells: list[ET.Element], root_ids: li
 
     min_x = float("inf")
     min_y = float("inf")
-    max_x = 0.0
-    max_y = 0.0
+    max_x = float("-inf")
+    max_y = float("-inf")
 
     for cell_id in selected_ids:
         x1, y1, x2, y2 = cell_bbox(cell_id, by_id, positions)
@@ -417,9 +506,11 @@ def build_snippet(title: str, source: str, cells: list[ET.Element], root_ids: li
         max_x = max(max_x, x2)
         max_y = max(max_y, y2)
 
-    if min_x == float("inf"):
+    if min_x == float("inf") or max_x == float("-inf"):
         min_x = 0.0
         min_y = 0.0
+        max_x = 0.0
+        max_y = 0.0
 
     for root_id in root_ids:
         geometry = ordered_by_id[root_id].find("mxGeometry")
@@ -744,7 +835,10 @@ class DrawioRenderer:
         explicit_height = element.get("h", element.get("height"))
 
         size_policy = str(element.get("size_policy", "")).strip().lower()
-        if role in {"grouping", "special-connector"} or size_policy == "native":
+        if role == "special-connector":
+            default_width, default_height = self._special_connector_root_dimensions(snippet)
+            default_mode = "native-special-connector"
+        elif role == "grouping" or size_policy == "native":
             default_width = snippet.width
             default_height = snippet.height
             default_mode = "native"
@@ -758,7 +852,17 @@ class DrawioRenderer:
             default_mode = "normalized-default"
 
         if explicit_width is not None and explicit_height is not None:
-            return float(explicit_width), float(explicit_height), "explicit", role
+            explicit_box_width = float(explicit_width)
+            explicit_box_height = float(explicit_height)
+            if role == "icon" and not bool(element.get("allow_aspect_distortion")):
+                fitted_width, fitted_height = fit_dimensions_within_box(
+                    snippet.width,
+                    snippet.height,
+                    explicit_box_width,
+                    explicit_box_height,
+                )
+                return fitted_width, fitted_height, "explicit-fit", role
+            return explicit_box_width, explicit_box_height, "explicit", role
 
         if explicit_width is not None:
             width = float(explicit_width)
@@ -777,6 +881,53 @@ class DrawioRenderer:
             return width, height, "explicit", role
 
         return default_width, default_height, default_mode, role
+
+    def _special_connector_root_dimensions(self, snippet: Snippet) -> tuple[float, float]:
+        if not snippet.root_ids:
+            return snippet.width, snippet.height
+
+        root_id = snippet.root_ids[0]
+        geometry = next(
+            (
+                cell.find("mxGeometry")
+                for cell in snippet.cells
+                if cell.attrib.get("id") == root_id
+            ),
+            None,
+        )
+        if geometry is None:
+            return snippet.width, snippet.height
+
+        width = parse_number(geometry.attrib.get("width"), snippet.width)
+        height = parse_number(geometry.attrib.get("height"), snippet.height)
+        return width or snippet.width, height or snippet.height
+
+    def _special_connector_parts(
+        self,
+        snippet: Snippet,
+    ) -> tuple[str, float, float, str | None, str | None]:
+        image_style: str | None = None
+        image_width = 0.0
+        image_height = 0.0
+        text_value: str | None = None
+        text_style: str | None = None
+
+        for cell in snippet.cells:
+            style = cell.attrib.get("style", "")
+            geometry = cell.find("mxGeometry")
+            if "shape=image" in style and geometry is not None and image_style is None:
+                image_style = style
+                image_width = parse_number(geometry.attrib.get("width"), 0.0)
+                image_height = parse_number(geometry.attrib.get("height"), 0.0)
+                continue
+            if strip_html(cell.attrib.get("value", "")) and geometry is not None and text_value is None:
+                text_value = cell.attrib.get("value")
+                text_style = style
+
+        if image_style is None or image_width <= 0 or image_height <= 0:
+            raise ValueError(f"Special connector snippet '{snippet.title}' is missing its image payload.")
+
+        return image_style, image_width, image_height, text_value, text_style
 
     def _render_non_edge(
         self,
@@ -910,6 +1061,7 @@ class DrawioRenderer:
             "icon_title": None,
             "source": None,
             "query": query,
+            "label": element.get("label"),
             "placeholder_shape": shape_name,
             "cell_id": cell_id,
             "x": x,
@@ -950,6 +1102,11 @@ class DrawioRenderer:
         snippet = self.catalog.get(str(icon_title))
         x, y = self._resolve_position(element, placed)
         width, height, size_mode, role = self._resolve_library_dimensions(element, snippet, str(icon_title))
+        if size_mode == "explicit-fit":
+            explicit_box_width = float(element.get("w", element.get("width", width)))
+            explicit_box_height = float(element.get("h", element.get("height", height)))
+            x += max((explicit_box_width - width) / 2, 0.0)
+            y += max((explicit_box_height - height) / 2, 0.0)
 
         if str(icon_title) in VCN_LIKE_TITLES:
             primary_cell_id = self._place_vcn_like_snippet(root, snippet, x, y, width, height, element)
@@ -962,6 +1119,7 @@ class DrawioRenderer:
             self._render_text(
                 root,
                 {
+                    "id": f"{element['id']}__external_label" if element.get("id") else None,
                     "x": x,
                     "y": y + height + float(element.get("external_label_offset", 2)),
                     "w": width,
@@ -980,6 +1138,11 @@ class DrawioRenderer:
                 "cell_id": primary_cell_id,
             }
 
+        native_width = snippet.width
+        native_height = snippet.height
+        if role == "special-connector":
+            native_width, native_height = self._special_connector_root_dimensions(snippet)
+
         return {
             "element_id": element.get("id"),
             "parent_element_id": element.get("parent"),
@@ -994,8 +1157,8 @@ class DrawioRenderer:
             "y": y,
             "w": width,
             "h": height,
-            "native_w": snippet.width,
-            "native_h": snippet.height,
+            "native_w": native_width,
+            "native_h": native_height,
             "size_mode": size_mode,
         }
 
@@ -1222,53 +1385,131 @@ class DrawioRenderer:
         height: float,
         element: dict[str, Any],
     ) -> str:
-        id_map, originals, clones = self._instantiate_snippet(snippet)
-        clones_by_old_id = {original_id: clone for original_id, clone in zip(originals, clones)}
-        scale_y = height / snippet.height
-        delta_width = width - snippet.width
+        image_style, image_native_width, image_native_height, default_text_value, default_text_style = (
+            self._special_connector_parts(snippet)
+        )
 
-        for old_id, original in originals.items():
-            clone = clones_by_old_id[old_id]
-            original_geo = original.find("mxGeometry")
-            clone_geo = clone.find("mxGeometry")
-            if original_geo is None or clone_geo is None:
-                continue
+        group_id = self._new_id()
+        group = ET.Element(
+            "mxCell",
+            {
+                "id": group_id,
+                "value": "",
+                "style": "group",
+                "vertex": "1",
+                "connectable": "0",
+                "parent": "1",
+            },
+        )
+        ET.SubElement(
+            group,
+            "mxGeometry",
+            {
+                "x": format_number(x),
+                "y": format_number(y),
+                "width": format_number(width),
+                "height": format_number(height),
+                "as": "geometry",
+            },
+        )
+        root.append(group)
 
-            if old_id in snippet.root_ids:
-                clone_geo.set("x", format_number(x))
-                clone_geo.set("y", format_number(y))
-                clone_geo.set("width", format_number(width))
-                clone_geo.set("height", format_number(height))
-                continue
+        hide_internal_label = element.get("hide_internal_label")
+        if hide_internal_label is None:
+            hide_internal_label = bool(element.get("external_label")) and not bool(element.get("preserve_internal_label"))
 
-            old_x = parse_number(original_geo.attrib.get("x"))
-            old_y = parse_number(original_geo.attrib.get("y"))
-            old_width = parse_number(original_geo.attrib.get("width"))
-            old_height = parse_number(original_geo.attrib.get("height"))
+        internal_label_value = None
+        if not hide_internal_label:
+            if element.get("label") is not None:
+                internal_label_value = text_to_html(str(element["label"]))
+            elif default_text_value:
+                internal_label_value = default_text_value
 
-            if original.attrib.get("edge") == "1":
-                self._scale_geometry(original, clone, 1.0, scale_y, is_root=False)
-                for point in clone_geo.findall("mxPoint"):
-                    if point.attrib.get("as") == "sourcePoint":
-                        point.set("x", format_number(width))
-                    if "y" in point.attrib:
-                        point.set("y", format_number(parse_number(point.attrib["y"]) * scale_y))
-            elif strip_html(original.attrib.get("value", "")):
-                clone_geo.set("x", format_number(max((width - old_width) / 2, 0)))
-                clone_geo.set("y", format_number(old_y * scale_y))
-                clone_geo.set("width", format_number(old_width))
-                clone_geo.set("height", format_number(old_height * scale_y))
-            elif "shape=image" in original.attrib.get("style", ""):
-                clone_geo.set("x", format_number(old_x + max(delta_width, 0)))
-                clone_geo.set("y", format_number(old_y * scale_y))
-                clone_geo.set("width", format_number(old_width))
-                clone_geo.set("height", format_number(old_height * scale_y))
-            else:
-                self._scale_geometry(original, clone, width / snippet.width, scale_y, is_root=False)
+        padding = max(min(height * 0.15, 10.0), 4.0)
+        text_gap = max(min(height * 0.18, 8.0), 4.0)
+        if internal_label_value:
+            icon_width, icon_height = fit_dimensions_within_box(
+                image_native_width,
+                image_native_height,
+                max(width * 0.42, 32.0),
+                max(height - (padding * 2), 12.0),
+            )
+            icon_x = padding
+            icon_y = (height - icon_height) / 2
+            text_x = icon_x + icon_width + text_gap
+            text_width = max(width - text_x - padding, 30.0)
+        else:
+            icon_width, icon_height = fit_dimensions_within_box(
+                image_native_width,
+                image_native_height,
+                max(width - (padding * 2), 12.0),
+                max(height - (padding * 2), 12.0),
+            )
+            icon_x = (width - icon_width) / 2
+            icon_y = (height - icon_height) / 2
+            text_x = padding
+            text_width = max(width - (padding * 2), 0.0)
 
-        self._apply_text_overrides(snippet, originals, clones_by_old_id, element)
-        self._append_clones(root, clones)
-        return self._primary_root_id(snippet, id_map)
+        image_id = self._new_id()
+        image_cell = ET.Element(
+            "mxCell",
+            {
+                "id": image_id,
+                "value": "",
+                "style": append_style(image_style, element.get("special_connector_icon_style")),
+                "vertex": "1",
+                "parent": group_id,
+            },
+        )
+        ET.SubElement(
+            image_cell,
+            "mxGeometry",
+            {
+                "x": format_number(icon_x),
+                "y": format_number(icon_y),
+                "width": format_number(icon_width),
+                "height": format_number(icon_height),
+                "as": "geometry",
+            },
+        )
+        root.append(image_cell)
+
+        if internal_label_value and text_width > 0:
+            label_id = self._new_id()
+            label_cell = ET.Element(
+                "mxCell",
+                {
+                    "id": label_id,
+                    "value": internal_label_value,
+                    "style": append_style(
+                        default_text_style or TEXT_STYLE,
+                        {
+                            "fillColor": "none",
+                            "strokeColor": "none",
+                            "rounded": "0",
+                            "align": "left",
+                            "verticalAlign": "middle",
+                            "fontFamily": "Oracle Sans",
+                        },
+                    ),
+                    "vertex": "1",
+                    "parent": group_id,
+                },
+            )
+            ET.SubElement(
+                label_cell,
+                "mxGeometry",
+                {
+                    "x": format_number(text_x),
+                    "y": "0",
+                    "width": format_number(text_width),
+                    "height": format_number(height),
+                    "as": "geometry",
+                },
+            )
+            root.append(label_cell)
+
+        return group_id
 
     def _render_edge(
         self,
@@ -1330,7 +1571,7 @@ class DrawioRenderer:
         geometry = ET.SubElement(edge, "mxGeometry", {"relative": "1", "as": "geometry"})
         normalized_waypoints: list[dict[str, float]] = []
         if element.get("waypoints"):
-            array = ET.SubElement(geometry, "Array", {"as": "points"})
+            raw_waypoints: list[tuple[float, float]] = []
             for waypoint in element["waypoints"]:
                 if isinstance(waypoint, dict):
                     point_x = float(waypoint["x"])
@@ -1338,12 +1579,25 @@ class DrawioRenderer:
                 else:
                     point_x = float(waypoint[0])
                     point_y = float(waypoint[1])
-                ET.SubElement(
-                    array,
-                    "mxPoint",
-                    {"x": format_number(point_x), "y": format_number(point_y)},
-                )
-                normalized_waypoints.append({"x": point_x, "y": point_y})
+                raw_waypoints.append((point_x, point_y))
+
+            normalized_points = normalize_connector_points(
+                anchor_point(placed[source_ref], source_anchor),
+                anchor_point(placed[target_ref], target_anchor),
+                raw_waypoints,
+            )
+            normalized_waypoints = [
+                {"x": point_x, "y": point_y}
+                for point_x, point_y in normalized_points[1:-1]
+            ]
+            if normalized_waypoints:
+                array = ET.SubElement(geometry, "Array", {"as": "points"})
+                for waypoint in normalized_waypoints:
+                    ET.SubElement(
+                        array,
+                        "mxPoint",
+                        {"x": format_number(waypoint["x"]), "y": format_number(waypoint["y"])},
+                    )
 
         root.append(edge)
 
@@ -1596,6 +1850,38 @@ def segment_intersects_rect(
     return False
 
 
+def segment_runs_along_rect_border(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    rect: tuple[float, float, float, float] | None,
+    tolerance: float = EDGE_BORDER_OVERLAP_TOLERANCE,
+    min_overlap: float = EDGE_BORDER_OVERLAP_MIN_LENGTH,
+) -> bool:
+    if rect is None:
+        return False
+
+    left, top, width, height = rect
+    right = left + width
+    bottom = top + height
+    orientation = segment_orientation(start, end)
+
+    if orientation == "horizontal":
+        y = start[1]
+        if abs(y - top) > tolerance and abs(y - bottom) > tolerance:
+            return False
+        overlap = overlap_length(start[0], end[0], left, right)
+        return overlap > min_overlap
+
+    if orientation == "vertical":
+        x = start[0]
+        if abs(x - left) > tolerance and abs(x - right) > tolerance:
+            return False
+        overlap = overlap_length(start[1], end[1], top, bottom)
+        return overlap > min_overlap
+
+    return False
+
+
 def build_edge_points(edge: dict[str, Any], nodes_by_id: dict[str, dict[str, Any]]) -> list[tuple[float, float]] | None:
     source = nodes_by_id.get(str(edge.get("source_element_id")))
     target = nodes_by_id.get(str(edge.get("target_element_id")))
@@ -1656,6 +1942,69 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
             if row.get("element_id") is not None:
                 nodes_by_id[str(row["element_id"])] = row
 
+        region_records = [
+            row
+            for row in rows
+            if row.get("kind") == "library"
+            and row.get("role") == "grouping"
+            and "Region" in str(row.get("icon_title") or "")
+        ]
+
+        for row in rows:
+            if row.get("kind") != "library" or row.get("role") != "icon" or is_anchor_record(row):
+                continue
+            if row.get("parent_element_id"):
+                continue
+            icon_title = str(row.get("icon_title") or "")
+            if icon_title in UNPARENTED_LIBRARY_ICON_ALLOWLIST:
+                continue
+            if not region_records:
+                continue
+
+            bounds = record_bounds(row)
+            if bounds is None:
+                continue
+            center = (bounds[0] + (bounds[2] / 2), bounds[1] + (bounds[3] / 2))
+            if any(point_within_rect(center, record_bounds(region), tolerance=PARENT_CENTER_TOLERANCE) for region in region_records):
+                continue
+
+            element_ref = record_identifier(row)
+            add_issue(
+                "oci-icon-outside-region",
+                f"{element_ref} is an OCI service icon but sits outside every OCI Region boundary.",
+                primary=element_ref,
+                element_id=row.get("element_id"),
+            )
+
+        for row in rows:
+            if row.get("role") != "placeholder" or is_anchor_record(row):
+                continue
+
+            placeholder_query = str(row.get("query") or "").strip()
+            if not placeholder_query:
+                placeholder_label = str(row.get("label") or "").replace("\n", " ").strip()
+                if placeholder_label.upper().startswith("PLACEHOLDER:"):
+                    placeholder_query = re.sub(r"(?i)^PLACEHOLDER:\s*", "", placeholder_label).strip()
+
+            if not placeholder_query:
+                continue
+
+            resolved = resolve_icon(placeholder_query, "physical")
+            if resolved.get("resolution") not in {"direct", "alias"}:
+                continue
+
+            element_ref = record_identifier(row)
+            add_issue(
+                "placeholder-despite-direct-icon",
+                (
+                    f"{element_ref} uses a placeholder even though {placeholder_query} resolves to the "
+                    f"official OCI icon {resolved.get('icon_title')}."
+                ),
+                primary=element_ref,
+                element_id=row.get("element_id"),
+                resolved_icon_title=resolved.get("icon_title"),
+            )
+
         icon_records = [
             row
             for row in rows
@@ -1675,7 +2024,7 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                 median_max_dimension = (icon_max_dimensions[midpoint - 1] + icon_max_dimensions[midpoint]) / 2
 
             for row in icon_records:
-                if row.get("size_mode") == "explicit":
+                if row.get("size_mode") in {"explicit", "explicit-fit"}:
                     continue
                 max_dimension = max(float(row["w"]), float(row["h"]))
                 if max_dimension < median_max_dimension * 0.6 or max_dimension > median_max_dimension * 1.5:
@@ -1751,7 +2100,9 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
         layout_nodes = [
             row
             for row in rows
-            if row.get("role") in {"icon", "placeholder"} and not is_anchor_record(row) and not is_container_record(row)
+            if row.get("role") in {"icon", "placeholder", "special-connector"}
+            and not is_anchor_record(row)
+            and not is_container_record(row)
         ]
         for first, second in combinations(layout_nodes, 2):
             if rectangles_overlap(record_bounds(first), record_bounds(second), padding=NODE_OVERLAP_PADDING):
@@ -1769,9 +2120,22 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
         edge_obstacles = [
             row
             for row in rows
-            if row.get("role") in {"icon", "placeholder", "text"}
+            if row.get("role") in {"icon", "placeholder", "special-connector", "text"}
             and not is_anchor_record(row)
             and not is_container_record(row)
+        ]
+        border_containers = [
+            row
+            for row in rows
+            if not is_anchor_record(row)
+            and (
+                (
+                    row.get("kind") == "library"
+                    and row.get("role") == "grouping"
+                    and "Region" not in str(row.get("icon_title") or "")
+                )
+                or is_container_record(row)
+            )
         ]
         edge_segments: list[dict[str, Any]] = []
         edges = [row for row in rows if row.get("kind") == "edge"]
@@ -1874,6 +2238,26 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                     )
                     break
 
+            for container in border_containers:
+                container_ref = record_identifier(container)
+                if container_ref in {record_identifier(source), record_identifier(target)}:
+                    continue
+
+                if any(
+                    segment_runs_along_rect_border(start, end, record_bounds(container))
+                    for start, end, orientation in segments
+                    if orientation in {"horizontal", "vertical"}
+                ):
+                    add_issue(
+                        "edge-on-container-border",
+                        f"{edge_ref} runs along the border of {container_ref}.",
+                        primary=edge_ref,
+                        secondary=container_ref,
+                        element_id=edge.get("element_id"),
+                        container_id=container.get("element_id"),
+                    )
+                    break
+
             for start, end, orientation in segments:
                 if orientation not in {"horizontal", "vertical"}:
                     continue
@@ -1887,29 +2271,75 @@ def review_render_report(report: list[dict[str, Any]]) -> dict[str, Any]:
                     }
                 )
 
-        for first, second in combinations(edge_segments, 2):
-            if first["edge_ref"] == second["edge_ref"]:
-                continue
-            if first["orientation"] != second["orientation"]:
-                continue
-
-            if first["orientation"] == "horizontal":
-                if abs(first["start"][1] - second["start"][1]) > EDGE_LANE_OVERLAP_TOLERANCE:
-                    continue
-                overlap = overlap_length(first["start"][0], first["end"][0], second["start"][0], second["end"][0])
+        lane_groups: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+        for segment in edge_segments:
+            if segment["orientation"] == "horizontal":
+                lane_coordinate = segment["start"][1]
             else:
-                if abs(first["start"][0] - second["start"][0]) > EDGE_LANE_OVERLAP_TOLERANCE:
-                    continue
-                overlap = overlap_length(first["start"][1], first["end"][1], second["start"][1], second["end"][1])
+                lane_coordinate = segment["start"][0]
+            lane_key = (
+                str(segment["orientation"]),
+                int(round(lane_coordinate / EDGE_LANE_OVERLAP_TOLERANCE)),
+            )
+            lane_groups[lane_key].append(segment)
 
-            if overlap > EDGE_LANE_OVERLAP_MIN_LENGTH:
+        for group_segments in lane_groups.values():
+            if len(group_segments) < 2:
+                continue
+
+            adjacency: dict[str, set[str]] = defaultdict(set)
+            element_ids: dict[str, Any] = {}
+            for first, second in combinations(group_segments, 2):
+                if first["edge_ref"] == second["edge_ref"]:
+                    continue
+
+                if first["orientation"] == "horizontal":
+                    if abs(first["start"][1] - second["start"][1]) > EDGE_LANE_OVERLAP_TOLERANCE:
+                        continue
+                    overlap = overlap_length(first["start"][0], first["end"][0], second["start"][0], second["end"][0])
+                else:
+                    if abs(first["start"][0] - second["start"][0]) > EDGE_LANE_OVERLAP_TOLERANCE:
+                        continue
+                    overlap = overlap_length(first["start"][1], first["end"][1], second["start"][1], second["end"][1])
+
+                if overlap <= EDGE_LANE_OVERLAP_MIN_LENGTH:
+                    continue
+
+                first_ref = str(first["edge_ref"])
+                second_ref = str(second["edge_ref"])
+                adjacency[first_ref].add(second_ref)
+                adjacency[second_ref].add(first_ref)
+                element_ids.setdefault(first_ref, first["element_id"])
+                element_ids.setdefault(second_ref, second["element_id"])
+
+            visited_edges: set[str] = set()
+            for edge_ref in sorted(adjacency):
+                if edge_ref in visited_edges:
+                    continue
+                stack = [edge_ref]
+                component: set[str] = set()
+                while stack:
+                    current = stack.pop()
+                    if current in component:
+                        continue
+                    component.add(current)
+                    stack.extend(sorted(adjacency[current] - component))
+                visited_edges.update(component)
+                if len(component) < 2:
+                    continue
+                members = sorted(component)
+                if len(members) == 2:
+                    message = f"{members[0]} shares a routing lane with {members[1]}."
+                    secondary = members[1]
+                else:
+                    message = f"{', '.join(members[:-1])}, and {members[-1]} share a routing lane."
+                    secondary = "|".join(members[1:])
                 add_issue(
                     "edge-lane-overlap",
-                    f"{first['edge_ref']} shares a routing lane with {second['edge_ref']}.",
-                    primary=str(first["edge_ref"]),
-                    secondary=str(second["edge_ref"]),
-                    element_id=first["element_id"],
-                    peer_element_id=second["element_id"],
+                    message,
+                    primary=members[0],
+                    secondary=secondary,
+                    element_id=element_ids.get(members[0]),
                 )
 
         issues.extend(page_issues)

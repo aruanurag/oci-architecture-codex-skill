@@ -54,11 +54,13 @@ STOPWORDS = {
 
 TAG_RULES = {
     "api-gateway": [{"api", "gateway"}],
+    "argocd": [{"argocd"}, {"argo", "cd"}, {"gitops"}],
     "autonomous-database": [{"autonomous", "database"}, {"adb"}],
     "azure": [{"azure"}],
     "bastion": [{"bastion"}],
     "chatbot": [{"chatbot"}, {"bot"}],
     "data-flow": [{"data", "flow"}],
+    "dicom": [{"dicom"}, {"dicomweb"}, {"orthanc"}, {"pacs"}, {"vna"}, {"medical", "imaging"}],
     "dr": [{"dr"}, {"disaster", "recovery"}, {"failover"}],
     "exadata": [{"exadata"}, {"exadb"}],
     "genai": [{"genai"}, {"generative", "ai"}, {"llm"}],
@@ -71,7 +73,11 @@ TAG_RULES = {
     "mushop": [{"mushop"}],
     "oauth": [{"oauth"}, {"oauth2"}],
     "oke": [{"oke"}, {"kubernetes"}, {"k8s"}],
+    "opensearch": [{"opensearch"}],
+    "postgresql": [{"postgres"}, {"postgresql"}],
+    "redis": [{"redis"}, {"valkey"}],
     "vision": [{"vision"}],
+    "weblogic": [{"weblogic"}, {"wls"}],
 }
 
 FOCUS_TAG_WEIGHTS = {
@@ -82,11 +88,17 @@ FOCUS_TAG_WEIGHTS = {
     "mushop": 24,
     "bastion": 22,
     "genai": 20,
+    "argocd": 18,
     "chatbot": 18,
+    "dicom": 18,
+    "weblogic": 18,
     "vision": 18,
     "integration": 18,
     "autonomous-database": 18,
     "exadata": 18,
+    "postgresql": 12,
+    "opensearch": 12,
+    "redis": 10,
 }
 
 CONTEXT_TAG_WEIGHTS = {
@@ -131,7 +143,26 @@ PHYSICAL_HINT_TOKENS = NETWORK_HINT_TOKENS | {"availability", "domain", "fault",
 REFERENCE_HINTS: dict[str, dict[str, Any]] = {
     "ai-llm-workflow-architecture.drawio": {
         "add_tags": {"genai"},
-        "keywords": {"agents", "embedding", "llm", "rag", "search", "vector", "workflow"},
+        "keywords": {
+            "agents",
+            "apex",
+            "assistant",
+            "data",
+            "science",
+            "devops",
+            "digital",
+            "embedding",
+            "genai",
+            "gpu",
+            "llm",
+            "object",
+            "storage",
+            "rag",
+            "search",
+            "speech",
+            "vector",
+            "workflow",
+        },
         "traits": {"ai", "architecture"},
         "view_kind": "architecture",
     },
@@ -144,7 +175,7 @@ REFERENCE_HINTS: dict[str, dict[str, Any]] = {
     },
     "architecture-use-bastion-service.drawio": {
         "add_tags": {"bastion"},
-        "keywords": {"access", "admin", "bastion", "compute", "jump", "private", "ssh"},
+        "keywords": {"access", "admin", "bastion", "compute", "jenkins", "jump", "private", "ssh", "weblogic"},
         "traits": {"architecture", "network", "physical", "security"},
         "view_kind": "architecture",
     },
@@ -169,14 +200,45 @@ REFERENCE_HINTS: dict[str, dict[str, Any]] = {
     "exadb-dr-on-db-at-azure.drawio": {
         "add_tags": {"azure", "dr", "exadata"},
         "remove_tags": {"autonomous-database", "hub-spoke"},
-        "keywords": {"azure", "database", "disaster", "exadata", "failover", "recovery", "standby"},
+        "keywords": {
+            "active",
+            "aks",
+            "azure",
+            "backup",
+            "database",
+            "data",
+            "guard",
+            "disaster",
+            "exadata",
+            "failover",
+            "hub",
+            "recovery",
+            "standby",
+            "vault",
+        },
         "traits": {"architecture", "cross-cloud", "dr"},
         "view_kind": "architecture",
     },
     "hub-spoke-oci.drawio": {
         "add_tags": {"hub-spoke"},
-        "keywords": {"drg", "fastconnect", "hub", "internet", "lpg", "on-premises", "peering", "spoke", "transit", "vpn"},
-        "traits": {"architecture", "network", "physical"},
+        "keywords": {
+            "azure",
+            "drg",
+            "edge",
+            "fastconnect",
+            "hospital",
+            "hub",
+            "hybrid",
+            "internet",
+            "lpg",
+            "medical",
+            "on-premises",
+            "peering",
+            "spoke",
+            "transit",
+            "vpn",
+        },
+        "traits": {"architecture", "hybrid", "network", "physical"},
         "view_kind": "architecture",
     },
     "multi-tenant-app-oci.drawio": {
@@ -187,13 +249,57 @@ REFERENCE_HINTS: dict[str, dict[str, Any]] = {
     },
     "mushop-infrastructure.drawio": {
         "add_tags": {"mushop", "oke"},
-        "keywords": {"cart", "commerce", "ecommerce", "ingress", "microservice", "mushop", "oke", "payment"},
+        "keywords": {
+            "argocd",
+            "cart",
+            "commerce",
+            "ecommerce",
+            "gitops",
+            "ingress",
+            "marketplace",
+            "microservice",
+            "mushop",
+            "oke",
+            "opensearch",
+            "payment",
+            "postgresql",
+            "redis",
+            "search",
+            "valkey",
+            "weblogic",
+        },
         "traits": {"application-platform", "architecture", "network", "oke", "physical"},
         "view_kind": "architecture",
     },
     "oke-architecture-diagram.drawio": {
         "add_tags": {"oke"},
-        "keywords": {"frontend", "ingress", "kubernetes", "lb", "microservice", "oke", "private", "public", "subnet", "vcn"},
+        "keywords": {
+            "argocd",
+            "dicom",
+            "fastconnect",
+            "frontend",
+            "gitops",
+            "ingress",
+            "jenkins",
+            "kubernetes",
+            "lb",
+            "marketplace",
+            "microservice",
+            "oke",
+            "opensearch",
+            "orthanc",
+            "pacs",
+            "postgresql",
+            "private",
+            "public",
+            "redis",
+            "registry",
+            "subnet",
+            "valkey",
+            "vcn",
+            "weblogic",
+            "wls",
+        },
         "traits": {"application-platform", "architecture", "network", "oke", "physical"},
         "view_kind": "architecture",
     },
@@ -391,6 +497,15 @@ def expand_query_tags(query: str) -> tuple[set[str], set[str]]:
     if "kubernetes" in tokens or "k8s" in tokens:
         tokens.add("oke")
         tags.add("oke")
+    if {"argo", "cd"} <= tokens or "argocd" in tokens or "gitops" in tokens:
+        tokens.update({"argocd", "gitops", "oke"})
+        tags.update({"argocd", "oke"})
+    if "weblogic" in tokens or "wls" in tokens:
+        tokens.update({"weblogic", "wls", "oke"})
+        tags.update({"weblogic", "oke"})
+    if {"dicom", "orthanc", "pacs", "vna"} & tokens or "dicomweb" in tokens:
+        tokens.update({"dicom", "medical", "imaging", "oke"})
+        tags.update({"dicom", "oke"})
     if "openid" in tokens or ("open" in tokens and "id" in tokens) or "oidc" in tokens:
         tokens.update({"oauth", "identity"})
         tags.update({"identity", "oauth"})
@@ -407,6 +522,23 @@ def expand_query_tags(query: str) -> tuple[set[str], set[str]]:
         tags.add("vision")
     if "azure" in tokens:
         tags.add("azure")
+    if "aks" in tokens:
+        tokens.add("azure")
+        tags.update({"azure", "dr"})
+    if "postgres" in tokens or "postgresql" in tokens:
+        tokens.update({"postgres", "postgresql"})
+        tags.add("postgresql")
+    if "redis" in tokens or "valkey" in tokens:
+        tokens.update({"redis", "valkey"})
+        tags.add("redis")
+    if "opensearch" in tokens:
+        tags.add("opensearch")
+    if "marketplace" in tokens:
+        tokens.add("oke")
+        tags.add("oke")
+    if {"postgres", "redis", "opensearch"} <= tokens or {"postgresql", "redis", "opensearch"} <= tokens:
+        tokens.add("oke")
+        tags.add("oke")
     if "saas" in tokens:
         tokens.add("tenant")
     return tokens, tags
@@ -474,6 +606,12 @@ def score_reference(reference: ReferenceArchitecture, query: str | QueryProfile)
     if profile.needs_network and "network" in reference.traits:
         fit_score += 8
     if profile.wants_physical and "physical" in reference.traits:
+        fit_score += 4
+    if "genai" in profile.tags and "ai" in reference.traits:
+        fit_score += 14
+    if {"argocd", "dicom", "opensearch", "postgresql", "redis", "weblogic"} & profile.tags and "oke" in reference.traits:
+        fit_score += 6
+    if "dicom" in profile.tags and "hybrid" in reference.traits:
         fit_score += 4
     if "saas" in profile.tokens and {"application-platform", "platform"} & reference.traits:
         fit_score += 3

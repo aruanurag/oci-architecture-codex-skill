@@ -14,8 +14,11 @@ This reference distills the Oracle-provided files bundled in `assets/drawio/`.
 - Do not use pink or Courier New in final diagrams. Oracle uses those only for instructional callouts inside the source files.
 - Default to physical diagrams only. Add a logical view only when the user explicitly asks for one.
 - Treat example pages as layout guidance. The toolkit explicitly says the examples are not always complete or technically correct.
+- When the user supplies a specific Oracle solution link or another explicit reference, treat that reference as the source of truth for the component set, topology, and major traffic flows.
 - Keep iterating until connectors look attached, readable, and non-overlapping in a visual export.
 - Treat broken-looking traffic arrows, arrowheads that seem detached, and labels colliding with arrows as blockers.
+- Treat sparse, text-only, or wireframe-looking exports as blockers even when the architecture is technically correct.
+- Treat a preview where an expected official icon is visually blank, clipped, or effectively replaced by a floating label as a blocker.
 
 ## Oracle Asset Usage
 
@@ -26,15 +29,17 @@ This reference distills the Oracle-provided files bundled in `assets/drawio/`.
 ## Planning And Clarification
 
 - Before drafting the actual diagram, do a short plan pass.
-- After the plan pass, derive the clarification questions from the unresolved gaps instead of using a fixed script.
+- After the plan pass, derive the clarification questions from the unresolved gaps instead of using a fixed script or hardcoded questionnaire.
 - Ask the smallest useful set of targeted clarification questions before authoring, usually 1 to 4, unless the user explicitly waives questions or the current thread already answered them.
 - If there are no blocking questions, say so explicitly before authoring the spec.
+- Present recommendations as part of the clarification pass. Lead with the most honest recommended choice before recording the selected answer, accepted recommendation, or explicit assumption.
 - Treat HA or DR posture, database type, and regional vs AD-specific subnet scope as layout-affecting inputs for OCI networked workloads.
 - Treat symmetry and stage-alignment preferences as layout-affecting inputs when the topology is staged, mirrored, or fanout-based.
 - Treat icon uncertainty as a real blocker when it could make the diagram misleading.
 - When no direct icon exists or the component itself is not fully understood, confirm with the user when possible and present recommended icon or placeholder options with the most honest one first.
 - Treat `closest` and `placeholder` icon resolutions as review findings that fail the clean-quality bar until they are explicitly disclosed and accepted.
 - Treat the required `clarification_gate` topics as recording buckets, not as a mandatory verbatim question list. If the plan or thread already settles a topic, record it with `thread_context`, `recommendation_accepted`, `assumed`, or `not_applicable` instead of asking a redundant question.
+- In reference replication mode, extract a structured reference summary first, then write a recreation prompt, then score each rendered draft against the reference. Prefer near-exact replication over creative embellishment when the Oracle reference is explicit.
 
 ## Logical Diagram Guidance
 
@@ -67,6 +72,7 @@ Use physical pages for deployable infrastructure layout.
 - Reserve dedicated traffic lanes when multiple arrows traverse the same area of the page.
 - Prefer straight connectors first and treat avoidable elbows as blockers.
 - If a connector truly must bend, keep the elbows orthogonal, aligned, and easy to justify.
+- Do not let external labels, service cards, or container titles rest directly on a primary connector lane when a nearby clean lane is available.
 - Keep mirrored or repeated stages visually balanced. When queue and consumer tiers repeat, align them symmetrically before hand-tuning connectors.
 - Treat shared or nearly collinear lanes between different semantic flows as overlaps even if the automated quality checker does not flag them.
 - Represent one flow as one visible connector. Use waypointed routes and tiny hidden attach anchors instead of splitting the same relationship into several stitched connector objects.
@@ -98,6 +104,8 @@ Use physical pages for deployable infrastructure layout.
 - Check that every requested service resolved to an official OCI icon and that any fallback or placeholder is explicitly called out.
 - Check spacing between icons and labels so native snippet labels do not collide with connectors, neighboring icons, or grouping borders.
 - Check spacing between subnet labels, AD background lanes, cluster containers, and service icons so background structure stays visually behind the foreground content.
+- Check that expected icon regions actually contain visible icon content in the exported preview rather than blank or nearly blank areas.
+- Reject layouts that still read as sparse scaffolding with large empty fields and too little visual weight for the claimed system.
 - Treat any overlap between unrelated icons, labels, grouping boxes, connectors, arrowheads, or location boundaries as a blocker.
 - Treat overlaps between separate top-level icons or location groups as blockers even when they are not siblings in the JSON structure.
 - Treat near-touches that read as overlap at presentation scale as blockers even when the underlying geometry technically clears.
