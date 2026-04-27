@@ -120,12 +120,13 @@ Use these rules for all generated OCI PowerPoint diagrams.
 - Do not stop after the first render.
 - Perform an architecture review after the first coherent render.
 - Run the renderer quality check.
+- Run the renderer text-containment gate and fail the pass if any `text-overflow` issue remains.
 - Export a preview image of the slide through PowerPoint when possible, not just a direct `.pptx` thumbnail path, because nested Oracle vector groups can render incompletely in simpler preview engines.
 - If the preview helper falls back to `Backend: quicklook-pptx`, treat icon-visibility findings as lower-confidence and confirm spacing, overlap, and routing against the PowerPoint geometry report plus a sibling draw.io shadow review before declaring the slide invalid.
 - Inspect the preview visually.
-- Perform a dedicated spacing and overlap review on that preview before declaring the slide clean.
+- Perform a dedicated spacing, overlap, and text-containment review on that preview before declaring the slide clean.
 - Fix architectural issues before treating the diagram as final, even if the linework is already clean.
-- Reroute and rerender until the linework, spacing, labels, overlaps, and containment are clean.
+- Reroute and rerender until the linework, spacing, labels, overlaps, containment, and text fit are clean.
 - Treat two consecutive clean quality passes as the minimum bar, not the usual stopping point.
 - Increase the review count after any recent icon-resolution issue, overlap, avoidable elbow, PowerPoint repair warning, or other material regression.
 - After a material fix, restart the clean-pass count and require fresh clean reviews.

@@ -27,6 +27,7 @@ Keep the same standards we established in the draw.io skill:
 - treat any connector elbow as a blocker unless the user explicitly accepts a bent route for that relationship
 - treat shared or nearly collinear lanes between different semantic flows, such as publish, consume, and database-write paths, as overlap even when the renderer's quality checker passes
 - keep icons centered, contained inside their parent boundaries, and scaled honestly
+- when presenter-only interpretation is useful, store it in page-level `presenter_notes` or `speaker_notes` instead of drawing visible guardrail or takeaway bands
 - treat missing direct icons, unofficial fallbacks, and placeholders as review findings that must be surfaced explicitly before sign-off
 - treat any `PLACEHOLDER:` card for a service that resolves to a direct or alias OCI icon as a blocker, not a cosmetic fallback
 - treat sparse, wireframe-looking, or text-card-dominated slides as blockers even when the topology is technically correct
@@ -43,6 +44,8 @@ This skill is PowerPoint-native:
 - it uses the bundled Oracle PowerPoint toolkit in `assets/powerpoint/oracle-oci-architecture-toolkit-v24.1.pptx`
 - it reuses Oracle’s native vector groups and physical grouping boxes from that deck
 - it renders a final `.pptx` plus a repeatable JSON spec
+- pair this skill with [../oci-ppt-design-director/SKILL.md](../oci-ppt-design-director/SKILL.md) before final sign-off so every customer-facing PowerPoint architecture slide gets a design-system and review pass, not just topology QA
+- when the slide needs reusable non-topology explainer modules such as layered host diagrams, control-plane sidecars, or conceptual subsystem insets, pair it with [../oci-diagram-patterns/SKILL.md](../oci-diagram-patterns/SKILL.md) instead of improvising freeform shapes
 
 ## Workflow
 
@@ -67,8 +70,12 @@ This skill is PowerPoint-native:
 14. In reference replication mode, produce a structured `Reference Summary` and a `Recreation Prompt` before drafting the slide. After each render, run a `Reference Alignment Review` with a `0-100` similarity score, the remaining differences, and the next meaningful fixes. Iterate up to `10` times and stop early at `>=95` similarity or when no meaningful improvement remains.
 15. If the Oracle PowerPoint toolkit changes, rebuild the icon catalog with `python3 scripts/build_powerpoint_catalog.py` and the baseline-slide catalog with `python3 scripts/build_powerpoint_reference_catalog.py`.
 16. Author the JSON slide spec only after the planning and clarification gate is complete, and record the final questions, selected answers, and recommended options in the top-level `clarification_gate` object.
+16a. If the slide needs presenter-only coaching, implication text, workshop output, or other spoken guidance, store it in page-level `presenter_notes` or `speaker_notes` instead of rendering that copy on the slide.
+16b. If the slide needs a conceptual sidecar or reusable explainer motif that is not itself an OCI service topology, read [../oci-diagram-patterns/SKILL.md](../oci-diagram-patterns/SKILL.md) and carry its `Pattern Brief` into the slide spec before drawing ad hoc boxes and arrows.
 17. Render with `python3 scripts/render_oci_powerpoint.py --spec ... --output ... --report-out ... --quality-out ... --fail-on-quality`. The renderer now refuses to render when the required `clarification_gate` is missing or incomplete.
 18. Export a preview image of the rendered `.pptx` and inspect it visually before delivery. Prefer `python3 scripts/export_powerpoint_preview.py --input ... --image-out ...` because it tries a PowerPoint-native PDF render first before falling back to a direct `.pptx` thumbnail when automation is unavailable.
+18a. Treat a PowerPoint repair prompt, an automation timeout, or a `quicklook-pptx` fallback on a deck that previously exported via PowerPoint as a package-integrity blocker, not just a preview inconvenience.
+18b. When a connector-heavy slide triggers that blocker, first remove or externalize custom text rewrites inside grouped OCI icons and retest before changing the topology or the connector routing.
 19. Run a dedicated spacing and overlap review against the preview before sign-off:
    - verify every requested service resolved to an official OCI icon; treat `closest` and `placeholder` outcomes as blockers until they are disclosed and intentionally accepted
    - reject any `PLACEHOLDER:` card whose service name resolves to a direct or alias OCI icon in the local PowerPoint catalog
@@ -97,6 +104,7 @@ This skill is PowerPoint-native:
 24. Increase the number of review and rerender passes whenever the recent passes found icon-resolution issues, overlaps, avoidable elbows, package-integrity issues such as PowerPoint repair prompts, a `quicklook-pptx` fallback preview that hides nested Oracle vector art, or any visually obvious regression.
 25. After any material fix, require fresh clean passes again instead of counting earlier clean reviews toward sign-off.
 26. Require a spacing-and-overlap review pass, an architectural-review pass, and at least two consecutive clean quality reviews before sharing the final deck, increasing to three or more consecutive clean passes when the slide was unstable in the prior review cycle.
+27. Before final sign-off, run the sibling [../oci-ppt-design-director/SKILL.md](../oci-ppt-design-director/SKILL.md) review gate and either record a clean pass or fix the findings before delivery.
 
 ## Reference Replication Mode
 
@@ -155,6 +163,10 @@ Do not let `closest` or `placeholder` resolutions silently pass the quality gate
 - Keep labels visually snug to icons.
 - Keep icons centered inside their parent subnet, tier, or container.
 - Do not let text cards dominate the slide when direct OCI icons are available and readable.
+- Keep ordinary slide text top-aligned inside its text box unless centered vertical anchoring is intentionally required for a label or callout.
+- Treat clipped text, vertically drifting copy, and text that touches or spills past its container border as blockers.
+- Treat presenter guidance, authoring prompts, or notes that appear on the visible slide canvas as blockers too.
+- Real PowerPoint presenter notes are acceptable when they are intentional and do not leak onto the visible slide.
 - Keep subnets and other grouping boxes visibly inset from their parent boundaries instead of letting borders touch.
 - Default OCI subnet containers to regional scope when the request does not say otherwise. For multi-AD HA, let a regional subnet span the VCN or region and show AD placement with the official Oracle `Availability Domain` grouping boxes arranged as tall vertical background containers inside the VCN but outside the subnet boundaries, matching the bundled sample-slide treatment on toolkit slides 31 and 32, plus duplicated workloads, AD or FD labels, or database role markers instead of cloning the subnet once per AD.
 - Keep sibling containers separated by a visible gap; treat overlapping app, queue, or data boxes as blockers.
@@ -167,6 +179,7 @@ Do not let `closest` or `placeholder` resolutions silently pass the quality gate
 - Prefer shorter container headings such as `Publisher`, `Processors`, or `Queue A` when the longer service name creates wrap noise.
 - Do not let connectors run on top of container borders when a clean nearby lane is available.
 - Do not let label cards, external labels, or service titles sit on top of connector lanes when a clean nearby lane is available.
+- On connector-heavy slides, prefer the native Oracle icon labels over rewriting multiple grouped icon labels in place. Put customer-specific wording in nearby narrative text or callouts unless a PowerPoint-native export proves the rewritten icon labels are safe.
 - For OKE clusters, use the official `Container Engine for Kubernetes` icon as the cluster’s identifying icon instead of a generic compute placeholder.
 - When OKE spans multiple ADs, represent it as a cluster-level container in the application subnet and place worker-node constructs inside that container with one worker grouping per AD.
 - Keep worker-node and similar compute icons at an honest, unstretched aspect ratio; if the icon starts looking wider or flatter than the Oracle original, reduce the width before increasing the height.
@@ -235,6 +248,8 @@ Use the repo-level `output/` directory for generated architecture files during t
 - Read [references/style-guide.md](references/style-guide.md) for PowerPoint-specific layout and QA rules.
 - Read [references/output-format.md](references/output-format.md) for the default package shape.
 - Read [references/diagram-spec.md](references/diagram-spec.md) for the renderable JSON contract.
+- Read [../oci-ppt-design-director/SKILL.md](../oci-ppt-design-director/SKILL.md) before final sign-off on every customer-facing PowerPoint architecture slide, and especially when the slide must fit a broader customer deck with a stronger visual system or stricter slide-to-slide consistency.
+- Read [../oci-diagram-patterns/SKILL.md](../oci-diagram-patterns/SKILL.md) when the architecture slide needs a reusable conceptual inset, sidecar explainer, or other editable diagram motif that is not a full OCI topology.
 - Read [references/oracle-solution-patterns.md](references/oracle-solution-patterns.md) when the user provides an Oracle solution link or asks to match a known Oracle reference.
 - Read [references/icon-catalog.md](references/icon-catalog.md) only when you need manual catalog browsing.
 - Run `python3 scripts/build_powerpoint_catalog.py` after updating the Oracle PowerPoint toolkit.

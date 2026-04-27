@@ -51,6 +51,10 @@ Use this JSON contract when you want the skill to render a finalized `.pptx` wit
       "page_type": "physical",
       "width": 1600,
       "height": 900,
+      "presenter_notes": [
+        "Use this slide to explain the recommended posture without adding a visible footer bar.",
+        "Keep audience-facing copy on the canvas and presenter-only talk track in notes."
+      ],
       "elements": []
     }
   ]
@@ -97,7 +101,11 @@ The intent is to make HA/DR posture, database choice, subnet framing, and missin
 - `page_type`: currently `physical`.
 - `width`: optional logical canvas width. Default is `1600`.
 - `height`: optional logical canvas height. Default is `900`.
+- `presenter_notes`: optional string or string array written to real PowerPoint presenter notes for that slide.
+- `speaker_notes`: optional alias for `presenter_notes`.
 - `elements`: ordered slide content. Put grouping elements first, then service icons, then edges.
+
+Use `presenter_notes` or `speaker_notes` for talk track, implications, guardrails, workshop outputs, or authoring guidance that should not appear on the visible slide canvas.
 
 ## Library Elements
 

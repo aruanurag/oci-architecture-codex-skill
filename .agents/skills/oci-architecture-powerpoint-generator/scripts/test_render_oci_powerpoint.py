@@ -100,6 +100,49 @@ def main() -> None:
             }
         ]
     }
+    clean_spec = {
+        "title": "Clean Render Baseline",
+        "clarification_gate": build_clarification_gate(),
+        "pages": [
+            {
+                "name": "Physical - Clean Render Baseline",
+                "page_type": "physical",
+                "width": 900,
+                "height": 500,
+                "elements": [
+                    {
+                        "id": "left",
+                        "type": "shape",
+                        "shape": "rounded-rectangle",
+                        "x": 140,
+                        "y": 190,
+                        "w": 120,
+                        "h": 70,
+                        "label": "Ingress",
+                        "style": "fillColor=#FFFFFF;strokeColor=#312D2A;"
+                    },
+                    {
+                        "id": "right",
+                        "type": "shape",
+                        "shape": "rounded-rectangle",
+                        "x": 420,
+                        "y": 190,
+                        "w": 120,
+                        "h": 70,
+                        "label": "App",
+                        "style": "fillColor=#FFFFFF;strokeColor=#312D2A;"
+                    },
+                    {
+                        "type": "edge",
+                        "source": "left",
+                        "target": "right",
+                        "source_anchor": "right",
+                        "target_anchor": "left"
+                    }
+                ]
+            }
+        ]
+    }
     guardrail_spec = {
         "title": "Layout Guardrails",
         "clarification_gate": build_clarification_gate(),
@@ -287,6 +330,70 @@ def main() -> None:
             }
         ]
     }
+    overflow_spec = {
+        "title": "Text Overflow Guardrail",
+        "clarification_gate": build_clarification_gate(),
+        "pages": [
+            {
+                "name": "Physical - Text Overflow Guardrail",
+                "page_type": "physical",
+                "width": 900,
+                "height": 500,
+                "elements": [
+                    {
+                        "id": "tiny-card",
+                        "type": "shape",
+                        "shape": "rounded-rectangle",
+                        "x": 120,
+                        "y": 130,
+                        "w": 132,
+                        "h": 46,
+                        "label": "This label is far too long for this tiny card",
+                        "style": "fillColor=#FFFFFF;strokeColor=#312D2A;fontSize=18;fontStyle=1;"
+                    },
+                    {
+                        "id": "tiny-copy",
+                        "type": "text",
+                        "x": 320,
+                        "y": 128,
+                        "w": 108,
+                        "h": 34,
+                        "text": "This body copy is too dense for the box.",
+                        "style": "align=left;fontSize=17;fontStyle=0;"
+                    }
+                ]
+            }
+        ]
+    }
+    notes_spec = {
+        "title": "Presenter Notes Support",
+        "clarification_gate": build_clarification_gate(),
+        "pages": [
+            {
+                "name": "Physical - Presenter Notes",
+                "page_type": "physical",
+                "width": 900,
+                "height": 500,
+                "presenter_notes": [
+                    "Lead with the customer implication instead of adding a visible takeaway strip.",
+                    "Use the card as proof and keep the spoken recommendation in notes.",
+                ],
+                "elements": [
+                    {
+                        "id": "message",
+                        "type": "shape",
+                        "shape": "rounded-rectangle",
+                        "x": 180,
+                        "y": 160,
+                        "w": 220,
+                        "h": 90,
+                        "label": "Proof card",
+                        "style": "fillColor=#FFFFFF;strokeColor=#312D2A;"
+                    }
+                ]
+            }
+        ]
+    }
     template_pptx, _, _ = default_paths()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -297,6 +404,9 @@ def main() -> None:
         placeholder_output_path = tmp / "placeholder.pptx"
         placeholder_report_path = tmp / "placeholder.report.json"
         placeholder_quality_path = tmp / "placeholder.quality.json"
+        clean_output_path = tmp / "clean.pptx"
+        clean_report_path = tmp / "clean.report.json"
+        clean_quality_path = tmp / "clean.quality.json"
         guardrail_output_path = tmp / "guardrail.pptx"
         guardrail_report_path = tmp / "guardrail.report.json"
         guardrail_quality_path = tmp / "guardrail.quality.json"
@@ -309,6 +419,12 @@ def main() -> None:
         semantic_output_path = tmp / "semantic.pptx"
         semantic_report_path = tmp / "semantic.report.json"
         semantic_quality_path = tmp / "semantic.quality.json"
+        overflow_output_path = tmp / "overflow.pptx"
+        overflow_report_path = tmp / "overflow.report.json"
+        overflow_quality_path = tmp / "overflow.quality.json"
+        notes_output_path = tmp / "notes.pptx"
+        notes_report_path = tmp / "notes.report.json"
+        notes_quality_path = tmp / "notes.quality.json"
 
         try:
             render_presentation(
@@ -336,7 +452,6 @@ def main() -> None:
         assert output_path.exists()
         quality = json.loads(quality_path.read_text())
         assert quality["pages"]
-        assert quality["pages"][0]["issue_count"] == 0, quality
         report = json.loads(report_path.read_text())
         first_edge = report["pages"][0]["edges"][0]
         assert first_edge["bend_count"] == 0, first_edge
@@ -344,13 +459,37 @@ def main() -> None:
 
         with zipfile.ZipFile(output_path) as archive:
             slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+            slide_rels_xml = archive.read("ppt/slides/_rels/slide1.xml.rels").decode("utf-8")
+            blank_layout_xml = archive.read("ppt/slideLayouts/slideLayout16.xml").decode("utf-8")
+            slide_master_xml = archive.read("ppt/slideMasters/slideMaster2.xml").decode("utf-8")
             notes_slides = [name for name in archive.namelist() if name.startswith("ppt/notesSlides/")]
         assert "<a:tailEnd" in slide_xml, slide_xml
         assert "<a:headEnd" not in slide_xml, slide_xml
         assert 'wrap="none"' in slide_xml, slide_xml
         assert "<p:cNvSpPr id=" not in slide_xml, slide_xml
         assert "<p:cNvGrpSpPr id=" not in slide_xml, slide_xml
+        assert 'Target="../slideLayouts/slideLayout16.xml"' in slide_rels_xml, slide_rels_xml
+        assert 'xmlns:p14=' in blank_layout_xml, blank_layout_xml
+        assert 'Requires="p14"' in blank_layout_xml, blank_layout_xml
+        assert "<p:pic" not in blank_layout_xml, blank_layout_xml
+        assert "<p:sp>" not in blank_layout_xml, blank_layout_xml
+        assert "Copyright" not in blank_layout_xml, blank_layout_xml
+        assert "Confidential" not in blank_layout_xml, blank_layout_xml
+        assert "Confidential" not in slide_master_xml, slide_master_xml
+        assert "Copyright" not in slide_master_xml, slide_master_xml
         assert not notes_slides, notes_slides
+
+        render_presentation(
+            clean_spec,
+            template_pptx=template_pptx,
+            output_path=clean_output_path,
+            report_out=clean_report_path,
+            quality_out=clean_quality_path,
+            fail_on_quality=False,
+        )
+
+        clean_quality = json.loads(clean_quality_path.read_text())
+        assert clean_quality["pages"][0]["issue_count"] == 0, clean_quality
 
         render_presentation(
             placeholder_spec,
@@ -420,9 +559,56 @@ def main() -> None:
         assert semantic_slide_xml.count('<a:prstDash val="sysDot"') == 1, semantic_slide_xml
         assert 'wrap="none"' in semantic_slide_xml, semantic_slide_xml
         assert "spAutoFit" in semantic_slide_xml, semantic_slide_xml
+        assert 'anchor="t"' in semantic_slide_xml, semantic_slide_xml
         semantic_quality = json.loads(semantic_quality_path.read_text())
         semantic_issue_types = {issue["type"] for issue in semantic_quality["pages"][0]["issues"]}
         assert "connector-elbows" in semantic_issue_types, semantic_quality
+
+        render_presentation(
+            overflow_spec,
+            template_pptx=template_pptx,
+            output_path=overflow_output_path,
+            report_out=overflow_report_path,
+            quality_out=overflow_quality_path,
+            fail_on_quality=False,
+        )
+
+        overflow_quality = json.loads(overflow_quality_path.read_text())
+        overflow_issue_types = {issue["type"] for issue in overflow_quality["pages"][0]["issues"]}
+        assert "text-overflow" in overflow_issue_types, overflow_quality
+
+        try:
+            render_presentation(
+                overflow_spec,
+                template_pptx=template_pptx,
+                output_path=tmp / "overflow-fail.pptx",
+                report_out=tmp / "overflow-fail.report.json",
+                quality_out=tmp / "overflow-fail.quality.json",
+                fail_on_quality=False,
+                fail_on_text_overflow=True,
+            )
+        except SystemExit as exc:
+            assert "Text overflow review found" in str(exc), exc
+        else:
+            raise AssertionError("Expected render_presentation to fail the hard text-overflow gate.")
+
+        render_presentation(
+            notes_spec,
+            template_pptx=template_pptx,
+            output_path=notes_output_path,
+            report_out=notes_report_path,
+            quality_out=notes_quality_path,
+            fail_on_quality=False,
+        )
+
+        with zipfile.ZipFile(notes_output_path) as archive:
+            notes_slide_xml = archive.read("ppt/notesSlides/notesSlide1.xml").decode("utf-8")
+            notes_slide_rels_xml = archive.read("ppt/notesSlides/_rels/notesSlide1.xml.rels").decode("utf-8")
+            notes_slide_rel_xml = archive.read("ppt/slides/_rels/slide1.xml.rels").decode("utf-8")
+        assert "customer implication" in notes_slide_xml, notes_slide_xml
+        assert "spoken recommendation in notes" in notes_slide_xml, notes_slide_xml
+        assert 'Target="../slides/slide1.xml"' in notes_slide_rels_xml, notes_slide_rels_xml
+        assert 'relationships/notesSlide' in notes_slide_rel_xml, notes_slide_rel_xml
 
     print("PowerPoint render tests passed.")
 

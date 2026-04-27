@@ -120,6 +120,7 @@ Unless the user says otherwise:
 - render to a finished `.pptx`, not just prose
 - use the repo-level `output/` directory during testing
 - visually review the exported preview and keep iterating until the diagram is clean
+- when presenter-only guidance is needed, store it in PowerPoint presenter notes instead of visible footer bars or summary strips
 
 ## JSON Slide Spec
 
@@ -153,6 +154,8 @@ Export a preview image from the rendered `.pptx` and inspect:
 Do not treat a clean preview as sufficient if the architecture review still finds a design problem.
 
 Prefer `python3 scripts/export_powerpoint_preview.py --input ... --image-out ...` so the preview goes through Microsoft PowerPoint before becoming an image.
+
+If the slide intentionally includes presenter notes, confirm they stay in PowerPoint notes and do not leak onto the visible preview canvas.
 
 ## Icon Mapping Table
 

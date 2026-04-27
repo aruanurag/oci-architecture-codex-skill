@@ -22,10 +22,22 @@ A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+MC_NS = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+P14_NS = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+A14_NS = "http://schemas.microsoft.com/office/drawing/2010/main"
+A16_NS = "http://schemas.microsoft.com/office/drawing/2014/main"
+ASVG_NS = "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
+ADEC_NS = "http://schemas.microsoft.com/office/drawing/2017/decorative"
 
 ET.register_namespace("a", A_NS)
 ET.register_namespace("p", P_NS)
 ET.register_namespace("r", R_NS)
+ET.register_namespace("mc", MC_NS)
+ET.register_namespace("p14", P14_NS)
+ET.register_namespace("a14", A14_NS)
+ET.register_namespace("a16", A16_NS)
+ET.register_namespace("asvg", ASVG_NS)
+ET.register_namespace("adec", ADEC_NS)
 ET.register_namespace("", REL_NS)
 
 NS = {"a": A_NS, "p": P_NS, "r": R_NS}
@@ -55,6 +67,13 @@ MAX_CONNECTOR_BENDS = 2
 MIN_GROUPING_INSET = 8.0
 SIBLING_OVERLAP_TOLERANCE = 2.0
 UNRELATED_OVERLAP_TOLERANCE = 2.0
+TEXT_FIT_ERROR_THRESHOLD = 0.62
+TEXT_FIT_CHAR_WIDTH = 0.40
+TEXT_FIT_UPPERCASE_WIDTH = 0.50
+TEXT_FIT_DIGIT_WIDTH = 0.46
+TEXT_FIT_WIDE_WIDTH = 0.66
+TEXT_FIT_NARROW_WIDTH = 0.16
+TEXT_FIT_SPACE_WIDTH = 0.24
 REQUIRED_CLARIFICATION_TOPICS = (
     "availability",
     "database",
@@ -69,6 +88,8 @@ ALLOWED_DECISION_RESOLUTION_SOURCES = {
     "assumed",
     "not_applicable",
 }
+BLANK_SLIDE_LAYOUT_NAME = "slideLayout16.xml"
+BLANK_SLIDE_LAYOUT_PATH = f"ppt/slideLayouts/{BLANK_SLIDE_LAYOUT_NAME}"
 
 STYLE_KV_RE = re.compile(r"([A-Za-z][A-Za-z0-9]*)=([^;]+)")
 TAG_RE = re.compile(r"<[^>]+>")
@@ -182,7 +203,16 @@ def build_empty_tx_body(
 
 def ensure_tx_body(shape: ET.Element) -> ET.Element:
     """Ensure placeholder shapes still carry a valid empty text body."""
-    return build_empty_tx_body(shape)
+    tx_body = build_empty_tx_body(shape)
+    ET.SubElement(tx_body, qn(A_NS, "p"))
+    return tx_body
+
+
+def normalize_text_bodies(root: ET.Element) -> None:
+    """PowerPoint expects each text body to include at least one paragraph node."""
+    for tx_body in root.findall(".//p:txBody", NS):
+        if tx_body.find("./a:p", NS) is None:
+            ET.SubElement(tx_body, qn(A_NS, "p"))
 
 
 def clone_text_template(shape: ET.Element) -> tuple[ET.Element | None, ET.Element | None, ET.Element | None, ET.Element | None]:
@@ -850,6 +880,99 @@ def estimate_label_height(text: str, font_size_pt: int) -> float:
     return max(20.0, (line_count * (font_size_pt + 3)) + 6.0)
 
 
+def text_units_per_point(page_width: float) -> float:
+    return page_width / 960.0
+
+
+def text_width_weight(ch: str) -> float:
+    if ch in " \t":
+        return TEXT_FIT_SPACE_WIDTH
+    if ch in "ilI.,;:!|/'`":
+        return TEXT_FIT_NARROW_WIDTH
+    if ch in "mwMW@#%&QO":
+        return TEXT_FIT_WIDE_WIDTH
+    if ch.isupper():
+        return TEXT_FIT_UPPERCASE_WIDTH
+    if ch.isdigit():
+        return TEXT_FIT_DIGIT_WIDTH
+    return TEXT_FIT_CHAR_WIDTH
+
+
+def estimate_text_width(text: str, font_size_pt: float, *, page_width: float) -> float:
+    font_units = font_size_pt * text_units_per_point(page_width)
+    return sum(text_width_weight(ch) for ch in text) * font_units
+
+
+def wrap_text_line(text: str, available_width: float, font_size_pt: float, *, page_width: float) -> list[str]:
+    stripped = text.strip()
+    if not stripped:
+        return [" "]
+
+    words = stripped.split(" ")
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        trial = word if not current else f"{current} {word}"
+        if current and estimate_text_width(trial, font_size_pt, page_width=page_width) > available_width:
+            lines.append(current)
+            current = word
+        else:
+            current = trial
+    if current or not lines:
+        lines.append(current or " ")
+    return lines
+
+
+def estimate_text_fit(
+    item: dict[str, Any],
+    *,
+    page_width: float,
+) -> dict[str, Any] | None:
+    text = str(item.get("text_content", "") or "").strip()
+    if not text:
+        return None
+
+    font_size_pt = float(item.get("font_size_pt", 11))
+    bold = bool(item.get("bold"))
+    zero_margins = bool(item.get("zero_margins"))
+    wrap_enabled = bool(item.get("wrap_enabled", True))
+    bbox = item["bbox"]
+
+    font_units = font_size_pt * text_units_per_point(page_width)
+    pad_x = 0.0 if zero_margins else max(3.0, font_units * 0.18)
+    pad_y = 0.0 if zero_margins else max(2.0, font_units * 0.10)
+    available_width = max(1.0, bbox["w"] - (pad_x * 2))
+    available_height = max(1.0, bbox["h"] - (pad_y * 2))
+
+    rendered_lines: list[str] = []
+    for paragraph in text.splitlines() or [""]:
+        rendered_lines.extend(
+            wrap_text_line(paragraph, available_width, font_size_pt, page_width=page_width)
+            if wrap_enabled
+            else [paragraph or " "]
+        )
+
+    if not rendered_lines:
+        rendered_lines = [" "]
+
+    width_needed = max(estimate_text_width(line, font_size_pt, page_width=page_width) for line in rendered_lines)
+    if len(rendered_lines) == 1:
+        height_needed = font_units * (0.62 if not bold else 0.66)
+    else:
+        height_needed = len(rendered_lines) * font_units * (0.72 if not bold else 0.76)
+
+    width_scale = available_width / max(width_needed, 1.0)
+    height_scale = available_height / max(height_needed, 1.0)
+    return {
+        "rendered_lines": rendered_lines,
+        "required_scale": min(width_scale, height_scale),
+        "available_width": available_width,
+        "available_height": available_height,
+        "width_needed": width_needed,
+        "height_needed": height_needed,
+    }
+
+
 def clamp_within_bounds(
     x: float,
     y: float,
@@ -1078,6 +1201,7 @@ def create_textbox(
     wrap: str | None = None,
     zero_margins: bool = False,
     auto_fit: bool = False,
+    anchor: str = "ctr",
 ) -> ET.Element:
     shape = ET.Element(qn(P_NS, "sp"))
     nv_sp_pr = ET.SubElement(shape, qn(P_NS, "nvSpPr"))
@@ -1110,6 +1234,7 @@ def create_textbox(
         font_size_pt=font_size_pt,
         bold=bold,
         align=align,
+        anchor=anchor,
         wrap=wrap,
         zero_margins=zero_margins,
         auto_fit=auto_fit,
@@ -1176,7 +1301,7 @@ def create_placeholder_shape(
         ET.SubElement(line, qn(A_NS, "prstDash"), {"val": "sysDot"})
     ET.SubElement(line, qn(A_NS, "miter"), {"lim": "800000"})
     if label:
-        set_text(shape, label, font_size_pt=font_size, bold=bold)
+        set_text(shape, label, font_size_pt=font_size, bold=bold, auto_fit=True)
     else:
         ensure_tx_body(shape)
     allocator.assign(shape)
@@ -1246,6 +1371,19 @@ def fit_dimensions(
 
 
 def build_slide_relationships(extra_relationships: list[ET.Element] | None = None) -> bytes:
+    return build_slide_relationships_for_page(
+        extra_relationships,
+        slide_number=1,
+        include_presenter_notes=False,
+    )
+
+
+def build_slide_relationships_for_page(
+    extra_relationships: list[ET.Element] | None = None,
+    *,
+    slide_number: int,
+    include_presenter_notes: bool,
+) -> bytes:
     root = ET.Element(qn(REL_NS, "Relationships"))
     ET.SubElement(
         root,
@@ -1253,12 +1391,87 @@ def build_slide_relationships(extra_relationships: list[ET.Element] | None = Non
         {
             "Id": "rId1",
             "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout",
-            "Target": "../slideLayouts/slideLayout17.xml",
+            "Target": f"../slideLayouts/{BLANK_SLIDE_LAYOUT_NAME}",
         },
     )
+    if include_presenter_notes:
+        ET.SubElement(
+            root,
+            qn(REL_NS, "Relationship"),
+            {
+                "Id": "rId2",
+                "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide",
+                "Target": f"../notesSlides/notesSlide{slide_number}.xml",
+            },
+        )
     for rel in extra_relationships or []:
         root.append(copy.deepcopy(rel))
     return serialize_xml(root)
+
+
+def normalize_presenter_notes(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        return text or None
+    if isinstance(raw, list):
+        lines = [str(item).strip() for item in raw if str(item).strip()]
+        if not lines:
+            return None
+        return "\n".join(lines)
+    text = str(raw).strip()
+    return text or None
+
+
+def find_placeholder_shape(root: ET.Element, placeholder_type: str) -> ET.Element | None:
+    for shape in root.findall(".//p:sp", NS):
+        placeholder = shape.find("./p:nvSpPr/p:nvPr/p:ph", NS)
+        if placeholder is not None and placeholder.attrib.get("type") == placeholder_type:
+            return shape
+    return None
+
+
+def update_notes_slide_xml(template_xml: bytes, *, notes_text: str, slide_number: int) -> bytes:
+    root = ET.fromstring(template_xml)
+    body_shape = find_placeholder_shape(root, "body")
+    if body_shape is None:
+        raise ValueError("Notes slide template is missing a body placeholder.")
+    set_text(
+        body_shape,
+        notes_text,
+        font_size_pt=12,
+        bold=False,
+        align="l",
+        preserve=True,
+        anchor="t",
+    )
+
+    slide_number_shape = find_placeholder_shape(root, "sldNum")
+    if slide_number_shape is not None:
+        text_node = slide_number_shape.find(".//a:t", NS)
+        if text_node is not None:
+            text_node.text = str(slide_number)
+
+    normalize_text_bodies(root)
+    return serialize_xml(root)
+
+
+def update_notes_slide_rels(template_xml: bytes, *, slide_number: int) -> bytes:
+    root = ET.fromstring(template_xml)
+    for rel in root.findall("./rel:Relationship", {"rel": REL_NS}):
+        if rel.attrib.get("Type", "").endswith("/slide"):
+            rel.attrib["Target"] = f"../slides/slide{slide_number}.xml"
+    return serialize_xml(root)
+
+
+def first_matching_part(contents: dict[str, bytes], preferred_name: str, prefix: str) -> bytes:
+    if preferred_name in contents:
+        return contents[preferred_name]
+    candidates = sorted(name for name in contents if name.startswith(prefix))
+    if not candidates:
+        raise ValueError(f"Template is missing required part prefix '{prefix}'.")
+    return contents[candidates[0]]
 
 
 def remap_element_relationships(
@@ -1339,7 +1552,7 @@ def update_presentation_rels(contents: dict[str, bytes], slide_count: int) -> by
     return serialize_xml(root)
 
 
-def update_content_types(contents: dict[str, bytes], slide_count: int) -> bytes:
+def update_content_types(contents: dict[str, bytes], slide_count: int, *, include_presenter_notes: bool) -> bytes:
     root = ET.fromstring(contents["[Content_Types].xml"])
     for override in list(root):
         if override.attrib.get("PartName", "").startswith("/ppt/slides/slide"):
@@ -1356,16 +1569,33 @@ def update_content_types(contents: dict[str, bytes], slide_count: int) -> bytes:
                 "ContentType": "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
             },
         )
+        if include_presenter_notes:
+            ET.SubElement(
+                root,
+                qn(CT_NS, "Override"),
+                {
+                    "PartName": f"/ppt/notesSlides/notesSlide{index + 1}.xml",
+                    "ContentType": "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
+                },
+            )
     return serialize_xml(root)
 
 
-def prune_unused_parts(contents: dict[str, bytes], slide_count: int) -> None:
+def prune_unused_parts(contents: dict[str, bytes], slide_count: int, *, include_presenter_notes: bool) -> None:
     note_prefixes = (
         "ppt/notesSlides/notesSlide",
         "ppt/notesSlides/_rels/notesSlide",
     )
     for name in list(contents):
-        if name.startswith(note_prefixes):
+        if not name.startswith(note_prefixes):
+            continue
+        if not include_presenter_notes:
+            del contents[name]
+            continue
+        match = re.search(r"notesSlide(\d+)\.xml(?:\.rels)?$", name)
+        if not match:
+            continue
+        if int(match.group(1)) > slide_count:
             del contents[name]
 
     prefixes = (
@@ -1387,6 +1617,8 @@ def prune_unused_parts(contents: dict[str, bytes], slide_count: int) -> None:
 
 def strip_confidential_markings(contents: dict[str, bytes]) -> None:
     phrases = {
+        "Copyright © 2022, Oracle and/or its affiliates",
+        "Confidential: Internal/Restricted/Highly Restricted",
         "Confidential - Oracle Restricted Employees Only",
         "Confidential - Oracle Restricted Employees Only ",
         "Oracle Restricted Employees Only",
@@ -1408,6 +1640,24 @@ def strip_confidential_markings(contents: dict[str, bytes]) -> None:
                 changed = True
         if changed:
             contents[name] = serialize_xml(root)
+
+
+def sanitize_blank_slide_layout(contents: dict[str, bytes]) -> None:
+    layout_name = BLANK_SLIDE_LAYOUT_PATH
+    if layout_name not in contents:
+        return
+
+    root = ET.fromstring(contents[layout_name])
+    sp_tree = root.find("./p:cSld/p:spTree", NS)
+    if sp_tree is None:
+        return
+
+    for child in list(sp_tree):
+        if local_name(child) in {"nvGrpSpPr", "grpSpPr"}:
+            continue
+        sp_tree.remove(child)
+
+    contents[layout_name] = serialize_xml(root)
 
 
 def compute_segment_center(points: list[tuple[float, float]]) -> tuple[float, float] | None:
@@ -1690,6 +1940,8 @@ def choose_connector_route(
 def should_review_page_margin(item: dict[str, Any], page_width: float, page_height: float) -> bool:
     if item.get("parent") or not item.get("visible"):
         return False
+    if item.get("qa_ignore"):
+        return False
     if item["kind"] in {"text", "hidden-anchor"}:
         return False
     bbox = item["bbox"]
@@ -1788,6 +2040,20 @@ def validate_geometry(
                             "message": f"{item['id']} is not centered on the {boundary_side} boundary of {boundary_parent_id}.",
                         }
                     )
+            if item.get("visible") and not item.get("qa_ignore"):
+                text_fit = estimate_text_fit(item, page_width=page_width)
+                if text_fit and text_fit["required_scale"] < TEXT_FIT_ERROR_THRESHOLD:
+                    scale_pct = max(text_fit["required_scale"], 0.0) * 100.0
+                    issues.append(
+                        {
+                            "severity": "error",
+                            "type": "text-overflow",
+                            "message": (
+                                f"{item['id']} is overstuffed for its box and would need roughly "
+                                f"{scale_pct:.0f}% text scale to fit cleanly."
+                            ),
+                        }
+                    )
             continue
 
         parent = placed_by_id[parent_id]
@@ -1833,6 +2099,21 @@ def validate_geometry(
                         "severity": "error",
                         "type": "boundary-placement",
                         "message": f"{item['id']} is not centered on the {boundary_side} boundary of {boundary_parent_id}.",
+                    }
+                )
+
+        if item.get("visible") and not item.get("qa_ignore"):
+            text_fit = estimate_text_fit(item, page_width=page_width)
+            if text_fit and text_fit["required_scale"] < TEXT_FIT_ERROR_THRESHOLD:
+                scale_pct = max(text_fit["required_scale"], 0.0) * 100.0
+                issues.append(
+                    {
+                        "severity": "error",
+                        "type": "text-overflow",
+                        "message": (
+                            f"{item['id']} is overstuffed for its box and would need roughly "
+                            f"{scale_pct:.0f}% text scale to fit cleanly."
+                        ),
                     }
                 )
 
@@ -1982,6 +2263,8 @@ def render_slide(
     *,
     asset_library: AssetLibrary,
     catalog_by_title: dict[str, dict[str, Any]],
+    slide_number: int,
+    include_presenter_notes: bool,
 ) -> tuple[bytes, bytes, dict[str, Any], dict[str, Any]]:
     slide_root = make_slide_root()
     sp_tree = slide_sp_tree(slide_root)
@@ -1997,7 +2280,7 @@ def render_slide(
     renderables: list[tuple[dict[str, Any], ET.Element | None]] = []
     external_label_renderables: list[dict[str, Any]] = []
     slide_extra_relationships: list[ET.Element] = []
-    next_slide_rel_id = 2
+    next_slide_rel_id = 3 if include_presenter_notes else 2
 
     for raw in page.get("elements", []):
         item = dict(raw)
@@ -2015,6 +2298,12 @@ def render_slide(
         native_bbox_emu = None
         separate_external_label_text: str | None = None
         internal_label_hidden = False
+        text_content = ""
+        font_size_pt = 11
+        bold = False
+        wrap_enabled = True
+        zero_margins = False
+        auto_fit = False
 
         if item.get("query") or item.get("icon_title"):
             query = item.get("icon_title") or item.get("query")
@@ -2092,10 +2381,14 @@ def render_slide(
         if kind == "text":
             style = parse_style(item.get("style"))
             align = {"left": "l", "center": "ctr", "right": "r"}.get(style.get("align", "center"), "ctr")
-            font_size = int(float(style.get("fontSize", "11")))
+            font_size_pt = int(float(style.get("fontSize", "11")))
             bold = style.get("fontStyle") == "1"
             text_value = item.get("text", "")
+            text_content = text_value
             single_line_text = "\n" not in text_value
+            wrap_enabled = not single_line_text
+            zero_margins = single_line_text
+            auto_fit = True
             render_element = create_textbox(
                 allocator,
                 x=to_emu(abs_x, scale_x),
@@ -2103,16 +2396,23 @@ def render_slide(
                 w=to_emu(width, scale_x),
                 h=to_emu(height, scale_y),
                 text=text_value,
-                font_size_pt=font_size,
+                font_size_pt=font_size_pt,
                 bold=bold,
                 align=align,
                 wrap="none" if single_line_text else None,
-                zero_margins=single_line_text,
-                auto_fit=single_line_text,
+                zero_margins=zero_margins,
+                auto_fit=auto_fit,
+                anchor="t",
             )
             kind = "text"
         elif kind == "shape":
             style = parse_style(item.get("style"))
+            font_size_pt = int(float(style.get("fontSize", "11")))
+            bold = style.get("fontStyle") == "1"
+            text_content = strip_non_placeholder_tags(item.get("label"))
+            wrap_enabled = True
+            zero_margins = False
+            auto_fit = bool(text_content)
             hidden = item.get("id", "").endswith("-anchor") or (
                 style.get("fillColor") == "none" and style.get("strokeColor") == "none"
             )
@@ -2174,6 +2474,12 @@ def render_slide(
             "category": resolution.get("category") if resolution else None,
             "boundary_parent": boundary_parent_id,
             "boundary_side": boundary_side,
+            "text_content": text_content,
+            "font_size_pt": font_size_pt,
+            "bold": bold,
+            "wrap_enabled": wrap_enabled,
+            "zero_margins": zero_margins,
+            "auto_fit": auto_fit,
         }
         placed_elements.append(record)
         if record["id"]:
@@ -2239,6 +2545,12 @@ def render_slide(
                 "category": None,
                 "boundary_parent": None,
                 "boundary_side": None,
+                "text_content": separate_external_label_text,
+                "font_size_pt": label_font_size,
+                "bold": bool(item.get("external_label_bold", True)),
+                "wrap_enabled": "\n" in separate_external_label_text,
+                "zero_margins": not bool(item.get("external_label_box", True)),
+                "auto_fit": True,
             }
             placed_elements.append(label_record)
             if label_id:
@@ -2389,6 +2701,7 @@ def render_slide(
     for label_element in edge_label_elements:
         sp_tree.append(label_element)
 
+    normalize_text_bodies(slide_root)
     issues = validate_geometry(page, placed_elements, element_index, edge_reports)
     report = {
         "page": page.get("name", "Slide"),
@@ -2400,7 +2713,16 @@ def render_slide(
         "issue_count": len(issues),
         "issues": issues,
     }
-    return serialize_xml(slide_root), build_slide_relationships(slide_extra_relationships), report, quality
+    return (
+        serialize_xml(slide_root),
+        build_slide_relationships_for_page(
+            slide_extra_relationships,
+            slide_number=slide_number,
+            include_presenter_notes=include_presenter_notes,
+        ),
+        report,
+        quality,
+    )
 
 
 def load_spec(path: Path) -> dict[str, Any]:
@@ -2415,6 +2737,7 @@ def render_presentation(
     report_out: Path | None,
     quality_out: Path | None,
     fail_on_quality: bool,
+    fail_on_text_overflow: bool = False,
 ) -> None:
     validate_clarification_gate(spec)
     catalog = load_catalog()
@@ -2424,6 +2747,11 @@ def render_presentation(
     pages = spec.get("pages") or []
     if not pages:
         raise ValueError("Spec must contain at least one page")
+    include_presenter_notes = any(
+        normalize_presenter_notes(page.get("presenter_notes") or page.get("speaker_notes"))
+        is not None
+        for page in pages
+    )
 
     with zipfile.ZipFile(template_pptx) as archive:
         contents = {name: archive.read(name) for name in archive.namelist()}
@@ -2435,16 +2763,44 @@ def render_presentation(
             page,
             asset_library=asset_library,
             catalog_by_title=catalog_by_title,
+            slide_number=index,
+            include_presenter_notes=include_presenter_notes,
         )
         contents[f"ppt/slides/slide{index}.xml"] = slide_xml
         contents[f"ppt/slides/_rels/slide{index}.xml.rels"] = slide_relationships
         slide_reports.append(report)
         slide_qualities.append(quality)
 
-    prune_unused_parts(contents, len(pages))
+    if include_presenter_notes:
+        for index, page in enumerate(pages, start=1):
+            notes_text = normalize_presenter_notes(
+                page.get("presenter_notes") or page.get("speaker_notes")
+            ) or ""
+            notes_name = f"ppt/notesSlides/notesSlide{index}.xml"
+            notes_rels_name = f"ppt/notesSlides/_rels/notesSlide{index}.xml.rels"
+            contents[notes_name] = update_notes_slide_xml(
+                first_matching_part(contents, notes_name, "ppt/notesSlides/notesSlide"),
+                notes_text=notes_text,
+                slide_number=index,
+            )
+            contents[notes_rels_name] = update_notes_slide_rels(
+                first_matching_part(
+                    contents,
+                    notes_rels_name,
+                    "ppt/notesSlides/_rels/notesSlide",
+                ),
+                slide_number=index,
+            )
+
+    prune_unused_parts(contents, len(pages), include_presenter_notes=include_presenter_notes)
     contents["ppt/presentation.xml"] = update_presentation_xml(contents, len(pages))
     contents["ppt/_rels/presentation.xml.rels"] = update_presentation_rels(contents, len(pages))
-    contents["[Content_Types].xml"] = update_content_types(contents, len(pages))
+    contents["[Content_Types].xml"] = update_content_types(
+        contents,
+        len(pages),
+        include_presenter_notes=include_presenter_notes,
+    )
+    sanitize_blank_slide_layout(contents)
     strip_confidential_markings(contents)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2471,8 +2827,16 @@ def render_presentation(
         quality_out.write_text(json.dumps({"title": spec.get("title"), "pages": slide_qualities}, indent=2) + "\n")
 
     total_issues = sum(page_quality["issue_count"] for page_quality in slide_qualities)
+    total_text_overflow_issues = sum(
+        1
+        for page_quality in slide_qualities
+        for issue in page_quality["issues"]
+        if issue.get("type") == "text-overflow"
+    )
     if fail_on_quality and total_issues:
         raise SystemExit(f"Quality review found {total_issues} issue(s).")
+    if fail_on_text_overflow and total_text_overflow_issues:
+        raise SystemExit(f"Text overflow review found {total_text_overflow_issues} blocking issue(s).")
 
 
 def main() -> None:
@@ -2484,6 +2848,11 @@ def main() -> None:
     parser.add_argument("--report-out", type=Path, help="Optional report JSON path")
     parser.add_argument("--quality-out", type=Path, help="Optional quality JSON path")
     parser.add_argument("--fail-on-quality", action="store_true", help="Exit non-zero if geometry issues are found")
+    parser.add_argument(
+        "--fail-on-text-overflow",
+        action="store_true",
+        help="Exit non-zero if any blocking text-overflow issues are found",
+    )
     parser.add_argument("--template", type=Path, default=template_pptx, help="Oracle PowerPoint toolkit path")
     args = parser.parse_args()
 
@@ -2495,6 +2864,7 @@ def main() -> None:
         report_out=args.report_out,
         quality_out=args.quality_out,
         fail_on_quality=args.fail_on_quality,
+        fail_on_text_overflow=args.fail_on_text_overflow,
     )
 
 
